@@ -11,14 +11,16 @@ use vtcode_core::config::EditorToolConfig;
 use vtcode_core::config::constants::tools as tool_names;
 use vtcode_core::config::loader::VTCodeConfig;
 use vtcode_core::core::threads::ArchivedSessionIntent;
+use vtcode_core::hooks::{LifecycleHookEngine, SessionStartTrigger};
 use vtcode_core::llm::provider as uni;
+use vtcode_core::notifications::set_global_notification_hook_engine;
 use vtcode_core::scheduler::{DurableTaskStore, SchedulerDaemon};
 use vtcode_core::tools::continuation::{PtyContinuationArgs, ReadChunkContinuationArgs};
 use vtcode_core::tools::terminal_app::{EditorLaunchConfig, TerminalAppLauncher};
 use vtcode_core::ui::theme;
 use vtcode_core::ui::{inline_theme_from_core_styles, to_tui_appearance};
 use vtcode_core::utils::ansi::MessageStyle;
-use vtcode_core::build_primary_agent_runtime_config;
+use vtcode_core::{build_primary_agent_hook_config, build_primary_agent_runtime_config};
 
 use crate::agent::runloop::prompt::refine_and_enrich_prompt;
 use crate::agent::runloop::unified::async_mcp_manager::{
@@ -850,6 +852,7 @@ async fn handle_select_primary_agent(
             .reset_to_default_from_specs(&specs)
             .display_name
             .clone();
+        sync_primary_agent_hook_runtime(ctx).await?;
         sync_primary_agent_mcp_runtime(ctx, state).await?;
         set_primary_agent_display(ctx, display_name);
         return Ok(());
@@ -861,6 +864,7 @@ async fn handle_select_primary_agent(
     match ctx.active_primary_agent.select_from_specs(&specs, &name) {
         Ok(active) => {
             let display_name = active.display_name.clone();
+            sync_primary_agent_hook_runtime(ctx).await?;
             sync_primary_agent_mcp_runtime(ctx, state).await?;
             set_primary_agent_display(ctx, display_name);
         }
@@ -874,6 +878,35 @@ async fn handle_select_primary_agent(
         }
     }
 
+    Ok(())
+}
+
+async fn sync_primary_agent_hook_runtime(ctx: &mut InteractionLoopContext<'_>) -> Result<()> {
+    let Some(cfg) = ctx.vt_cfg.as_ref() else {
+        *ctx.lifecycle_hooks = None;
+        set_global_notification_hook_engine(None);
+        return Ok(());
+    };
+
+    let transcript_path = match ctx.lifecycle_hooks.as_ref() {
+        Some(hooks) => hooks.transcript_path().await,
+        None => None,
+    };
+    let hooks_config =
+        build_primary_agent_hook_config(&cfg.hooks, ctx.active_primary_agent.active());
+    let next = LifecycleHookEngine::new_with_session(
+        ctx.config.workspace.clone(),
+        &hooks_config,
+        SessionStartTrigger::Startup,
+        ctx.thread_id,
+        cfg.permissions.default_mode,
+    )?;
+    if let (Some(hooks), Some(path)) = (next.as_ref(), transcript_path) {
+        hooks.update_transcript_path(Some(path)).await;
+    }
+
+    set_global_notification_hook_engine(next.clone());
+    *ctx.lifecycle_hooks = next;
     Ok(())
 }
 
@@ -895,11 +928,8 @@ async fn sync_primary_agent_mcp_runtime(
     *state.pending_mcp_refresh = true;
 
     let tool_documentation_mode = cfg.agent.tool_documentation_mode;
-    let deferred_tool_policy = active_deferred_tool_policy(
-        ctx.config,
-        ctx.vt_cfg.as_ref(),
-        &**ctx.provider_client,
-    );
+    let deferred_tool_policy =
+        active_deferred_tool_policy(ctx.config, ctx.vt_cfg.as_ref(), &**ctx.provider_client);
     refresh_tool_snapshot(
         ctx.tool_registry,
         ctx.tools,
@@ -910,7 +940,8 @@ async fn sync_primary_agent_mcp_runtime(
         &deferred_tool_policy,
     )
     .await;
-    ctx.tool_catalog.mark_pending_refresh("primary_agent_mcp_reconfigure");
+    ctx.tool_catalog
+        .mark_pending_refresh("primary_agent_mcp_reconfigure");
 
     if restarted_mcp_runtime {
         tracing::debug!("Restarted active MCP runtime after primary agent switch");

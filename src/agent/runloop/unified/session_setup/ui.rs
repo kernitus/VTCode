@@ -39,6 +39,7 @@ use vtcode_core::hooks::{LifecycleHookEngine, SessionEndReason, SessionStartTrig
 use vtcode_core::notifications::{
     set_global_notification_hook_engine, set_global_terminal_focused,
 };
+use vtcode_core::primary_agent::build_primary_agent_hook_config;
 use vtcode_core::prompts::discover_prompt_templates;
 use vtcode_core::ui::slash::visible_commands;
 use vtcode_core::ui::theme;
@@ -110,9 +111,11 @@ pub(crate) async fn initialize_session_ui(
     } = options;
 
     let lifecycle_hooks = if let Some(vt) = vt_cfg {
+        let hooks =
+            build_primary_agent_hook_config(&vt.hooks, session_state.active_primary_agent.active());
         LifecycleHookEngine::new_with_session(
             config.workspace.clone(),
-            &vt.hooks,
+            &hooks,
             session_trigger,
             session_id,
             vt.permissions.default_mode,

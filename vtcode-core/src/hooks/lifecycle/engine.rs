@@ -609,6 +609,11 @@ impl LifecycleHookEngine {
         state.transcript_path = path;
     }
 
+    pub async fn transcript_path(&self) -> Option<PathBuf> {
+        let state = self.inner.state.lock().await;
+        state.transcript_path.clone()
+    }
+
     pub async fn update_permission_mode(&self, permission_mode: PermissionMode) {
         let mut current = self.inner.permission_mode.write().await;
         *current = permission_mode;

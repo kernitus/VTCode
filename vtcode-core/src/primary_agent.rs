@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use vtcode_config::constants::defaults::DEFAULT_PRIMARY_AGENT_NAME;
 use vtcode_config::{
-    DiscoveredSubagents, McpProviderConfig, PermissionMode, SubagentMcpServer, SubagentSource,
-    SubagentSpec, builtin_primary_build_agent,
+    DiscoveredSubagents, HookGroupConfig, HooksConfig, McpProviderConfig, PermissionMode,
+    SubagentMcpServer, SubagentSource, SubagentSpec, builtin_primary_build_agent,
 };
 
 use crate::config::{ReasoningEffortLevel, VTCodeConfig};
@@ -34,6 +34,7 @@ pub struct ActivePrimaryAgent {
     pub permission_mode: Option<PermissionMode>,
     pub model: Option<String>,
     pub reasoning_effort: Option<String>,
+    pub hooks: Option<HooksConfig>,
     pub skills: Vec<String>,
     pub mcp_servers: Vec<SubagentMcpServer>,
 }
@@ -62,6 +63,7 @@ impl ActivePrimaryAgent {
             permission_mode: runtime.permission_mode,
             model: runtime.model.clone(),
             reasoning_effort: runtime.reasoning_effort.clone(),
+            hooks: runtime.hooks.clone(),
             skills: runtime.skills.clone(),
             mcp_servers: runtime.mcp_servers.clone(),
         }
@@ -262,6 +264,16 @@ pub fn build_primary_agent_runtime_config(
     config
 }
 
+#[must_use]
+pub fn build_primary_agent_hook_config(
+    global: &HooksConfig,
+    agent: &ActivePrimaryAgent,
+) -> HooksConfig {
+    let mut config = global.clone();
+    merge_active_primary_hooks(&mut config, agent.hooks.as_ref());
+    config
+}
+
 pub fn apply_primary_agent_prompt_context(context: &mut PromptContext, agent: &ActivePrimaryAgent) {
     context.replace_available_skills_with_named(agent.skills.as_slice());
 }
@@ -304,6 +316,43 @@ fn merge_primary_mcp_servers(config: &mut VTCodeConfig, servers: &[SubagentMcpSe
     }
 }
 
+fn merge_active_primary_hooks(config: &mut HooksConfig, hooks: Option<&HooksConfig>) {
+    let Some(hooks) = hooks else {
+        return;
+    };
+
+    config.lifecycle.quiet_success_output |= hooks.lifecycle.quiet_success_output;
+    append_hook_groups(
+        &mut config.lifecycle.user_prompt_submit,
+        &hooks.lifecycle.user_prompt_submit,
+    );
+    append_hook_groups(
+        &mut config.lifecycle.pre_tool_use,
+        &hooks.lifecycle.pre_tool_use,
+    );
+    append_hook_groups(
+        &mut config.lifecycle.post_tool_use,
+        &hooks.lifecycle.post_tool_use,
+    );
+    append_hook_groups(
+        &mut config.lifecycle.permission_request,
+        &hooks.lifecycle.permission_request,
+    );
+    append_hook_groups(
+        &mut config.lifecycle.pre_compact,
+        &hooks.lifecycle.pre_compact,
+    );
+    append_hook_groups(&mut config.lifecycle.stop, &hooks.lifecycle.stop);
+    append_hook_groups(
+        &mut config.lifecycle.notification,
+        &hooks.lifecycle.notification,
+    );
+}
+
+fn append_hook_groups(target: &mut Vec<HookGroupConfig>, source: &[HookGroupConfig]) {
+    target.extend(source.iter().cloned());
+}
+
 fn inline_mcp_provider(name: &str, value: &serde_json::Value) -> Option<McpProviderConfig> {
     let object = value.as_object()?;
     let mut payload = serde_json::Map::with_capacity(object.len().saturating_add(1));
@@ -330,8 +379,8 @@ mod tests {
     use serde_json::json;
     use tempfile::TempDir;
     use vtcode_config::{
-        HooksConfig, SubagentDiscoveryInput, SubagentMcpServer, SubagentMemoryScope,
-        SubagentSource, discover_subagents,
+        HookCommandConfig, HooksConfig, SubagentDiscoveryInput, SubagentMcpServer,
+        SubagentMemoryScope, SubagentSource, discover_subagents,
     };
 
     use super::*;
@@ -351,6 +400,7 @@ mod tests {
         assert_eq!(active.permission_mode, Some(PermissionMode::Plan));
         assert_eq!(active.model.as_deref(), Some("gpt-5.1"));
         assert_eq!(active.reasoning_effort.as_deref(), Some("high"));
+        assert!(active.hooks.is_none());
     }
 
     #[test]
@@ -466,6 +516,7 @@ mod tests {
         assert_eq!(active.permission_mode, runtime.permission_mode);
         assert_eq!(active.model, runtime.model);
         assert_eq!(active.reasoning_effort, runtime.reasoning_effort);
+        assert_eq!(active.hooks, runtime.hooks);
         assert_eq!(active.skills, runtime.skills);
         assert_eq!(active.mcp_servers, runtime.mcp_servers);
     }
@@ -643,6 +694,113 @@ mod tests {
     }
 
     #[test]
+    fn primary_hook_config_merges_supported_main_session_events_after_global_hooks() {
+        let mut global = HooksConfig::default();
+        global.lifecycle.user_prompt_submit = vec![hook_group("global-user")];
+        global.lifecycle.pre_tool_use = vec![hook_group("global-pre")];
+        global.lifecycle.post_tool_use = vec![hook_group("global-post")];
+        global.lifecycle.permission_request = vec![hook_group("global-permission")];
+        global.lifecycle.pre_compact = vec![hook_group("global-compact")];
+        global.lifecycle.stop = vec![hook_group("global-stop")];
+        global.lifecycle.notification = vec![hook_group("global-notification")];
+
+        let mut primary_hooks = HooksConfig::default();
+        primary_hooks.lifecycle.user_prompt_submit = vec![hook_group("primary-user")];
+        primary_hooks.lifecycle.pre_tool_use = vec![hook_group("primary-pre")];
+        primary_hooks.lifecycle.post_tool_use = vec![hook_group("primary-post")];
+        primary_hooks.lifecycle.permission_request = vec![hook_group("primary-permission")];
+        primary_hooks.lifecycle.pre_compact = vec![hook_group("primary-compact")];
+        primary_hooks.lifecycle.stop = vec![hook_group("primary-stop")];
+        primary_hooks.lifecycle.notification = vec![hook_group("primary-notification")];
+
+        let mut spec = test_spec("worker");
+        spec.hooks = Some(primary_hooks);
+        let active = ActivePrimaryAgent::from_spec(&spec);
+
+        let merged = build_primary_agent_hook_config(&global, &active);
+
+        assert_hook_commands(
+            &merged.lifecycle.user_prompt_submit,
+            &["global-user", "primary-user"],
+        );
+        assert_hook_commands(
+            &merged.lifecycle.pre_tool_use,
+            &["global-pre", "primary-pre"],
+        );
+        assert_hook_commands(
+            &merged.lifecycle.post_tool_use,
+            &["global-post", "primary-post"],
+        );
+        assert_hook_commands(
+            &merged.lifecycle.permission_request,
+            &["global-permission", "primary-permission"],
+        );
+        assert_hook_commands(
+            &merged.lifecycle.pre_compact,
+            &["global-compact", "primary-compact"],
+        );
+        assert_hook_commands(&merged.lifecycle.stop, &["global-stop", "primary-stop"]);
+        assert_hook_commands(
+            &merged.lifecycle.notification,
+            &["global-notification", "primary-notification"],
+        );
+    }
+
+    #[test]
+    fn primary_hook_config_excludes_global_and_subagent_lifecycle_events() {
+        let global = HooksConfig::default();
+        let mut primary_hooks = HooksConfig::default();
+        primary_hooks.lifecycle.session_start = vec![hook_group("primary-session-start")];
+        primary_hooks.lifecycle.session_end = vec![hook_group("primary-session-end")];
+        primary_hooks.lifecycle.subagent_start = vec![hook_group("primary-subagent-start")];
+        primary_hooks.lifecycle.subagent_stop = vec![hook_group("primary-subagent-stop")];
+        primary_hooks.lifecycle.task_completion = vec![hook_group("primary-task-completion")];
+        primary_hooks.lifecycle.task_completed = vec![hook_group("primary-task-completed")];
+
+        let mut spec = test_spec("worker");
+        spec.hooks = Some(primary_hooks);
+        let active = ActivePrimaryAgent::from_spec(&spec);
+
+        let merged = build_primary_agent_hook_config(&global, &active);
+
+        assert!(merged.lifecycle.session_start.is_empty());
+        assert!(merged.lifecycle.session_end.is_empty());
+        assert!(merged.lifecycle.subagent_start.is_empty());
+        assert!(merged.lifecycle.subagent_stop.is_empty());
+        assert!(merged.lifecycle.task_completion.is_empty());
+        assert!(merged.lifecycle.task_completed.is_empty());
+        assert!(merged.lifecycle.stop.is_empty());
+    }
+
+    #[test]
+    fn primary_hook_config_recomputes_without_previous_primary_leakage() {
+        let global = HooksConfig::default();
+        let mut first_hooks = HooksConfig::default();
+        first_hooks.lifecycle.pre_tool_use = vec![hook_group("first-pre")];
+        let mut second_hooks = HooksConfig::default();
+        second_hooks.lifecycle.pre_tool_use = vec![hook_group("second-pre")];
+
+        let mut first = test_spec("first");
+        first.hooks = Some(first_hooks);
+        let mut second = test_spec("second");
+        second.hooks = Some(second_hooks);
+        let specs = vec![first, second];
+        let mut state = ActivePrimaryAgentState::default();
+
+        state
+            .select_from_specs(&specs, "first")
+            .expect("selected first");
+        let first_config = build_primary_agent_hook_config(&global, state.active());
+        assert_hook_commands(&first_config.lifecycle.pre_tool_use, &["first-pre"]);
+
+        state
+            .select_from_specs(&specs, "second")
+            .expect("selected second");
+        let second_config = build_primary_agent_hook_config(&global, state.active());
+        assert_hook_commands(&second_config.lifecycle.pre_tool_use, &["second-pre"]);
+    }
+
+    #[test]
     fn active_primary_state_recomputes_skills_mcp_and_metadata_on_switch() {
         let mut first = test_spec("first");
         first.description = "First metadata".to_string();
@@ -707,5 +865,24 @@ mod tests {
             file_path: None,
             warnings: Vec::new(),
         }
+    }
+
+    fn hook_group(command: &str) -> HookGroupConfig {
+        HookGroupConfig {
+            matcher: None,
+            hooks: vec![HookCommandConfig {
+                command: command.to_string(),
+                ..HookCommandConfig::default()
+            }],
+        }
+    }
+
+    fn assert_hook_commands(groups: &[HookGroupConfig], expected: &[&str]) {
+        let commands = groups
+            .iter()
+            .flat_map(|group| group.hooks.iter())
+            .map(|hook| hook.command.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(commands, expected);
     }
 }

@@ -59,7 +59,7 @@ pub(crate) struct InteractionLoopContext<'a> {
     pub mcp_panel_state: &'a mut crate::agent::runloop::mcp_events::McpPanelState,
     pub linked_directories:
         &'a mut Vec<crate::agent::runloop::unified::workspace_links::LinkedDirectory>,
-    pub lifecycle_hooks: Option<&'a LifecycleHookEngine>,
+    pub lifecycle_hooks: &'a mut Option<LifecycleHookEngine>,
     pub full_auto: bool,
     pub skip_confirmations: bool,
     pub approval_recorder: &'a Arc<vtcode_core::tools::ApprovalRecorder>,
@@ -131,7 +131,7 @@ impl<'a> InteractionLoopContext<'a> {
             active_thread_label: self.active_thread_label,
             ctrl_c_state: self.ctrl_c_state,
             ctrl_c_notify: self.ctrl_c_notify,
-            lifecycle_hooks: self.lifecycle_hooks,
+            lifecycle_hooks: self.lifecycle_hooks.as_ref(),
             default_placeholder: self.default_placeholder,
             last_forced_redraw: self.last_forced_redraw,
             input_status_state,

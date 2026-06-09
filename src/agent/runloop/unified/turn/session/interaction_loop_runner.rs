@@ -471,7 +471,7 @@ pub(super) async fn run_interaction_loop_impl(
 
         let turn_id = SessionId::generate().into_inner();
 
-        if let Some(hooks) = ctx.lifecycle_hooks {
+        if let Some(hooks) = ctx.lifecycle_hooks.as_ref() {
             match hooks
                 .run_user_prompt_submit(&turn_id, input_owned.as_str())
                 .await

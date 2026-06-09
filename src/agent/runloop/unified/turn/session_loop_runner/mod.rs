@@ -319,7 +319,7 @@ pub(super) async fn run_single_agent_loop_unified_impl(
         let input_activity_counter = ui_setup.input_activity_counter;
         let checkpoint_manager = ui_setup.checkpoint_manager;
         let mut session_archive = ui_setup.session_archive;
-        let lifecycle_hooks = ui_setup.lifecycle_hooks;
+        let mut lifecycle_hooks = ui_setup.lifecycle_hooks;
         let mut context_manager = ui_setup.context_manager;
         let mut default_placeholder = ui_setup.default_placeholder;
         let mut follow_up_placeholder = ui_setup.follow_up_placeholder;
@@ -552,7 +552,7 @@ pub(super) async fn run_single_agent_loop_unified_impl(
                     session_stats: &mut session_stats,
                     mcp_panel_state: &mut mcp_panel_state,
                     linked_directories: &mut linked_directories,
-                    lifecycle_hooks: lifecycle_hooks.as_ref(),
+                    lifecycle_hooks: &mut lifecycle_hooks,
                     full_auto,
                     skip_confirmations,
                     approval_recorder: &approval_recorder,

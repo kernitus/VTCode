@@ -333,7 +333,7 @@ async fn handle_show_memory_intent(
             full_auto: ctx.full_auto,
             loaded_skills: ctx.loaded_skills,
             checkpoint_manager: ctx.checkpoint_manager,
-            lifecycle_hooks: ctx.lifecycle_hooks,
+            lifecycle_hooks: ctx.lifecycle_hooks.as_ref(),
             harness_emitter: ctx.harness_emitter,
         },
     )
