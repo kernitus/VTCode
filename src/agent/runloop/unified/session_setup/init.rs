@@ -321,10 +321,7 @@ pub(crate) async fn initialize_session(
     };
     if let (Some(manager), Some(cfg)) = (async_mcp_manager.as_ref(), vt_cfg) {
         manager
-            .reconfigure(primary_agent_mcp_config(
-                cfg,
-                active_primary_agent.active(),
-            ))
+            .reconfigure(primary_agent_mcp_config(cfg, active_primary_agent.active()))
             .await?;
     }
 
@@ -603,7 +600,9 @@ mod tests {
     use std::collections::BTreeMap;
 
     use serde_json::json;
-    use vtcode_config::{AgentMode, PermissionMode, SubagentMcpServer, SubagentSource, SubagentSpec};
+    use vtcode_config::{
+        AgentMode, PermissionMode, SubagentMcpServer, SubagentSource, SubagentSpec,
+    };
 
     use super::*;
 
