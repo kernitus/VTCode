@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use vtcode_config::constants::defaults::DEFAULT_PRIMARY_AGENT_NAME;
+use vtcode_config::core::permissions::AgentPermissionsConfig;
 use vtcode_config::{
     DiscoveredSubagents, HookGroupConfig, HooksConfig, McpProviderConfig, PermissionMode,
     SubagentMcpServer, SubagentMemoryScope, SubagentSource, SubagentSpec,
@@ -32,7 +33,7 @@ pub struct ActivePrimaryAgent {
     pub instructions: String,
     pub tools: Option<Vec<String>>,
     pub disallowed_tools: Vec<String>,
-    pub permission_mode: Option<PermissionMode>,
+    pub permissions: AgentPermissionsConfig,
     pub model: Option<String>,
     pub reasoning_effort: Option<String>,
     pub hooks: Option<HooksConfig>,
@@ -62,7 +63,7 @@ impl ActivePrimaryAgent {
             instructions: runtime.instructions.clone(),
             tools: runtime.tools.clone(),
             disallowed_tools: runtime.disallowed_tools.clone(),
-            permission_mode: runtime.permission_mode,
+            permissions: runtime.permissions.clone(),
             model: runtime.model.clone(),
             reasoning_effort: runtime.reasoning_effort.clone(),
             hooks: runtime.hooks.clone(),
@@ -249,10 +250,6 @@ pub fn build_primary_agent_runtime_config(
     agent: &ActivePrimaryAgent,
 ) -> VTCodeConfig {
     let mut config = parent.clone();
-    if let Some(mode) = agent.permission_mode {
-        config.permissions.default_mode =
-            clamp_primary_permission_mode(parent.permissions.default_mode, Some(mode));
-    }
     if let Some(model) = agent.model.as_ref() {
         config.agent.default_model = model.clone();
     }
@@ -381,6 +378,7 @@ mod tests {
 
     use serde_json::json;
     use tempfile::TempDir;
+    use vtcode_config::core::permissions::PermissionDefault;
     use vtcode_config::{
         HookCommandConfig, HooksConfig, SubagentDiscoveryInput, SubagentMcpServer,
         SubagentMemoryScope, SubagentSource, discover_subagents,
@@ -400,7 +398,7 @@ mod tests {
         assert_eq!(active.instructions, "planner instructions");
         assert_eq!(active.tools, Some(vec!["unified_search".to_string()]));
         assert_eq!(active.disallowed_tools, vec!["unified_file".to_string()]);
-        assert_eq!(active.permission_mode, Some(PermissionMode::Plan));
+        assert_eq!(active.permissions.default, PermissionDefault::Deny);
         assert_eq!(active.model.as_deref(), Some("gpt-5.1"));
         assert_eq!(active.reasoning_effort.as_deref(), Some("high"));
         assert!(active.hooks.is_none());
@@ -474,7 +472,7 @@ mod tests {
         assert_eq!(active.instructions, "worker instructions");
         assert_eq!(active.tools, Some(vec!["unified_search".to_string()]));
         assert_eq!(active.disallowed_tools, vec!["unified_file".to_string()]);
-        assert_eq!(active.permission_mode, Some(PermissionMode::Plan));
+        assert_eq!(active.permissions.default, PermissionDefault::Deny);
         assert_eq!(active.model.as_deref(), Some("gpt-5.1"));
         assert_eq!(active.reasoning_effort.as_deref(), Some("high"));
         assert_eq!(active.skills, vec!["rust".to_string()]);
@@ -517,7 +515,7 @@ mod tests {
         assert_eq!(active.instructions, runtime.instructions);
         assert_eq!(active.tools, runtime.tools);
         assert_eq!(active.disallowed_tools, runtime.disallowed_tools);
-        assert_eq!(active.permission_mode, runtime.permission_mode);
+        assert_eq!(active.permissions, runtime.permissions);
         assert_eq!(active.model, runtime.model);
         assert_eq!(active.reasoning_effort, runtime.reasoning_effort);
         assert_eq!(active.hooks, runtime.hooks);
@@ -558,6 +556,7 @@ mod tests {
                 }
             })),
             plugin_agent_files: Vec::new(),
+            include_user_agents: false,
         })
         .expect("discovered subagents");
 
@@ -655,7 +654,6 @@ mod tests {
     #[test]
     fn build_primary_agent_runtime_config_preserves_baseline_fields_and_merges_mcp() {
         let mut parent = VTCodeConfig::default();
-        parent.permissions.default_mode = PermissionMode::Default;
         parent.agent.default_model = "parent-model".to_string();
         parent.mcp.providers.push(
             serde_json::from_value(json!({
@@ -667,7 +665,7 @@ mod tests {
         );
 
         let mut spec = test_spec("worker");
-        spec.permission_mode = Some(PermissionMode::Auto);
+        spec.permissions = AgentPermissionsConfig::new(PermissionDefault::Auto);
         spec.model = Some("agent-model".to_string());
         spec.reasoning_effort = Some("low".to_string());
         spec.mcp_servers = vec![SubagentMcpServer::Inline(BTreeMap::from([
@@ -690,7 +688,6 @@ mod tests {
 
         let runtime = build_primary_agent_runtime_config(&parent, &active);
 
-        assert_eq!(runtime.permissions.default_mode, PermissionMode::Default);
         assert_eq!(runtime.agent.default_model, "agent-model");
         assert_eq!(runtime.agent.reasoning_effort, ReasoningEffortLevel::Low);
         assert_eq!(runtime.mcp.providers.len(), 2);
@@ -854,7 +851,7 @@ mod tests {
             model: Some("gpt-5.1".to_string()),
             color: Some("blue".to_string()),
             reasoning_effort: Some("high".to_string()),
-            permission_mode: Some(PermissionMode::Plan),
+            permissions: AgentPermissionsConfig::new(PermissionDefault::Deny),
             skills: Vec::new(),
             mcp_servers: Vec::new(),
             hooks: None,

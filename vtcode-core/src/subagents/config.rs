@@ -1,9 +1,10 @@
 use anyhow::Result;
 use std::path::Path;
 use std::path::PathBuf;
+use vtcode_config::core::permissions::AgentPermissionsConfig;
 use vtcode_config::{
-    HooksConfig, McpProviderConfig, PermissionMode, SubagentMcpServer, SubagentMemoryScope,
-    SubagentSource, SubagentSpec,
+    HooksConfig, McpProviderConfig, SubagentMcpServer, SubagentMemoryScope, SubagentSource,
+    SubagentSpec,
 };
 
 use super::constants::{
@@ -29,7 +30,7 @@ pub struct ResolvedAgentRuntimeView {
     pub instructions: String,
     pub tools: Option<Vec<String>>,
     pub disallowed_tools: Vec<String>,
-    pub permission_mode: Option<PermissionMode>,
+    pub permissions: AgentPermissionsConfig,
     pub model: Option<String>,
     pub reasoning_effort: Option<String>,
     pub hooks: Option<HooksConfig>,
@@ -53,7 +54,7 @@ impl ResolvedAgentRuntimeView {
             instructions: spec.prompt.clone(),
             tools: spec.tools.clone(),
             disallowed_tools: spec.disallowed_tools.clone(),
-            permission_mode: spec.permission_mode,
+            permissions: spec.permissions.clone(),
             model: spec.model.clone(),
             reasoning_effort: spec.reasoning_effort.clone(),
             hooks: spec.hooks.clone(),
@@ -91,10 +92,6 @@ fn build_child_config_from_runtime(
 ) -> VTCodeConfig {
     let mut child = parent.clone();
     child.agent.default_model = model.to_string();
-    if let Some(mode) = runtime.permission_mode {
-        child.permissions.default_mode =
-            clamp_permission_mode(parent.permissions.default_mode, mode);
-    }
     if let Some(max_turns) = normalize_child_max_turns(max_turns) {
         child.automation.full_auto.max_turns = max_turns;
     }
@@ -176,33 +173,6 @@ pub fn prepare_child_runtime_config(
     child_cfg.agent.default_model = resolved_model.to_string();
     child_cfg.agent.reasoning_effort = child_reasoning_effort;
     Ok((resolved_model, child_reasoning_effort, child_cfg))
-}
-
-// ─── Permission Handling ────────────────────────────────────────────────────
-
-fn clamp_permission_mode(parent: PermissionMode, requested: PermissionMode) -> PermissionMode {
-    if matches!(
-        parent,
-        PermissionMode::Auto | PermissionMode::BypassPermissions
-    ) {
-        return parent;
-    }
-    if permission_rank(requested) <= permission_rank(parent) {
-        requested
-    } else {
-        parent
-    }
-}
-
-fn permission_rank(mode: PermissionMode) -> u8 {
-    match mode {
-        PermissionMode::DontAsk => 0,
-        PermissionMode::Plan => 1,
-        PermissionMode::Default => 2,
-        PermissionMode::AcceptEdits => 3,
-        PermissionMode::Auto => 4,
-        PermissionMode::BypassPermissions => 5,
-    }
 }
 
 fn intersect_allowed_tools(parent_allowed: &[String], spec_allowed: &[String]) -> Vec<String> {

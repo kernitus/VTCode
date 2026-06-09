@@ -75,11 +75,8 @@ impl AgentPermissionsConfig {
 /// Permission system configuration - Controls command resolution, audit logging, and caching
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct PermissionsConfig {
-    /// Default unified permission mode for the current session.
-    #[serde(default)]
-    pub default_mode: PermissionMode,
-
     /// Classifier-backed auto mode policy and environment settings.
     #[serde(default)]
     pub auto_mode: AutoModeConfig,
@@ -91,10 +88,6 @@ pub struct PermissionsConfig {
     /// Rules that require an interactive prompt when they match.
     #[serde(default)]
     pub ask: Vec<String>,
-
-    /// Rules that classifier-backed auto mode may approve when they match.
-    #[serde(default)]
-    pub auto: Vec<String>,
 
     /// Rules that deny matching tool calls.
     #[serde(default)]
@@ -291,11 +284,9 @@ fn default_auto_mode_allow_exceptions() -> Vec<String> {
 impl Default for PermissionsConfig {
     fn default() -> Self {
         Self {
-            default_mode: PermissionMode::default(),
             auto_mode: AutoModeConfig::default(),
             allow: Vec::new(),
             ask: Vec::new(),
-            auto: Vec::new(),
             deny: Vec::new(),
             enabled: default_enabled(),
             resolve_commands: default_resolve_commands(),
@@ -312,7 +303,7 @@ impl Default for PermissionsConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::{AgentPermissionsConfig, PermissionDefault, PermissionMode, PermissionsConfig};
+    use super::{AgentPermissionsConfig, PermissionDefault, PermissionsConfig};
 
     #[test]
     fn parses_agent_permission_defaults_and_empty_buckets() {
@@ -336,76 +327,6 @@ mod tests {
     }
 
     #[test]
-    fn parses_claude_style_mode_aliases() {
-        let config: PermissionsConfig = toml::from_str(
-            r#"
-            default_mode = "acceptEdits"
-            "#,
-        )
-        .expect("permissions config");
-        assert_eq!(config.default_mode, PermissionMode::AcceptEdits);
-
-        let config: PermissionsConfig = toml::from_str(
-            r#"
-            default_mode = "dontAsk"
-            "#,
-        )
-        .expect("permissions config");
-        assert_eq!(config.default_mode, PermissionMode::DontAsk);
-
-        let config: PermissionsConfig = toml::from_str(
-            r#"
-            default_mode = "bypassPermissions"
-            "#,
-        )
-        .expect("permissions config");
-        assert_eq!(config.default_mode, PermissionMode::BypassPermissions);
-
-        let config: PermissionsConfig = toml::from_str(
-            r#"
-            default_mode = "auto"
-            "#,
-        )
-        .expect("permissions config");
-        assert_eq!(config.default_mode, PermissionMode::Auto);
-    }
-
-    #[test]
-    fn parses_legacy_mode_aliases() {
-        let config: PermissionsConfig = toml::from_str(
-            r#"
-            default_mode = "ask"
-            "#,
-        )
-        .expect("permissions config");
-        assert_eq!(config.default_mode, PermissionMode::Default);
-
-        let config: PermissionsConfig = toml::from_str(
-            r#"
-            default_mode = "auto-approved"
-            "#,
-        )
-        .expect("permissions config");
-        assert_eq!(config.default_mode, PermissionMode::AcceptEdits);
-
-        let config: PermissionsConfig = toml::from_str(
-            r#"
-            default_mode = "full-auto"
-            "#,
-        )
-        .expect("permissions config");
-        assert_eq!(config.default_mode, PermissionMode::BypassPermissions);
-
-        let config: PermissionsConfig = toml::from_str(
-            r#"
-            default_mode = "trusted_auto"
-            "#,
-        )
-        .expect("permissions config");
-        assert_eq!(config.default_mode, PermissionMode::Auto);
-    }
-
-    #[test]
     fn parses_exact_tool_rules() {
         let config: PermissionsConfig = toml::from_str(
             r#"
@@ -420,6 +341,25 @@ mod tests {
             vec!["read_file".to_string(), "unified_search".to_string()]
         );
         assert_eq!(config.deny, vec!["unified_exec".to_string()]);
+    }
+
+    #[test]
+    fn rejects_removed_global_default_and_auto_rules() {
+        let err = toml::from_str::<PermissionsConfig>(
+            r#"
+            default_mode = "ask"
+            "#,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("unknown field `default_mode`"));
+
+        let err = toml::from_str::<PermissionsConfig>(
+            r#"
+            auto = ["unified_exec"]
+            "#,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("unknown field `auto`"));
     }
 
     #[test]

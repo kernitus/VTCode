@@ -118,7 +118,7 @@ impl SubagentController {
             &config.vt_cfg.hooks,
             SessionStartTrigger::Startup,
             config.parent_session_id.clone(),
-            config.vt_cfg.permissions.default_mode,
+            crate::config::PermissionMode::Default,
         )?;
         let background_children = load_background_state(&config.workspace_root)?
             .records
@@ -1889,7 +1889,6 @@ fn transcript_line_from_message(message: &Message) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::PermissionMode;
     use crate::config::constants::models;
     use crate::config::constants::tools;
     use crate::config::models::{ModelId, Provider};
@@ -1904,10 +1903,17 @@ mod tests {
     use std::time::Duration;
     use tempfile::TempDir;
     use tokio::sync::Notify;
+    use vtcode_config::core::permissions::{AgentPermissionsConfig, PermissionDefault};
     use vtcode_config::{
         HookCommandConfig, HookGroupConfig, HooksConfig, SubagentMcpServer, SubagentMemoryScope,
         SubagentSource, SubagentSpec,
     };
+
+    fn readonly_agent_permissions() -> AgentPermissionsConfig {
+        let mut permissions = AgentPermissionsConfig::new(PermissionDefault::Deny);
+        permissions.allow = vec![tools::READ_FILE.to_string()];
+        permissions
+    }
 
     fn test_controller_config(
         workspace_root: PathBuf,
@@ -2260,7 +2266,7 @@ Inspect the repository.
             model: None,
             color: None,
             reasoning_effort: None,
-            permission_mode: Some(PermissionMode::Plan),
+            permissions: readonly_agent_permissions(),
             skills: Vec::new(),
             mcp_servers: Vec::new(),
             hooks: None,
@@ -2337,7 +2343,7 @@ Inspect the repository.
             model: None,
             color: None,
             reasoning_effort: None,
-            permission_mode: None,
+            permissions: AgentPermissionsConfig::new(PermissionDefault::Ask),
             skills: Vec::new(),
             mcp_servers: Vec::new(),
             hooks: None,
@@ -2361,9 +2367,8 @@ Inspect the repository.
     }
 
     #[test]
-    fn build_child_config_clamps_permissions_and_intersects_allowed_tools() {
+    fn build_child_config_intersects_allowed_tools_and_preserves_global_denies() {
         let mut parent = VTCodeConfig::default();
-        parent.permissions.default_mode = PermissionMode::Default;
         parent.permissions.allow = vec![
             tools::READ_FILE.to_string(),
             tools::UNIFIED_SEARCH.to_string(),
@@ -2374,7 +2379,7 @@ Inspect the repository.
             .into_iter()
             .find(|spec| spec.name == "worker")
             .expect("worker");
-        spec.permission_mode = Some(PermissionMode::BypassPermissions);
+        spec.permissions = AgentPermissionsConfig::new(PermissionDefault::Auto);
         spec.tools = Some(vec![
             tools::SPAWN_AGENT.to_string(),
             tools::UNIFIED_SEARCH.to_string(),
@@ -2382,7 +2387,6 @@ Inspect the repository.
         ]);
 
         let child = build_child_config(&parent, &spec, models::openai::GPT_5_4, None);
-        assert_eq!(child.permissions.default_mode, PermissionMode::Default);
         assert_eq!(
             child.permissions.allow,
             vec![
