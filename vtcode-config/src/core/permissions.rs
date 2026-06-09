@@ -30,6 +30,48 @@ pub enum PermissionMode {
     BypassPermissions,
 }
 
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PermissionDefault {
+    Ask,
+    Allow,
+    Auto,
+    Deny,
+}
+
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct AgentPermissionsConfig {
+    pub default: PermissionDefault,
+
+    #[serde(default)]
+    pub allow: Vec<String>,
+
+    #[serde(default)]
+    pub ask: Vec<String>,
+
+    #[serde(default)]
+    pub auto: Vec<String>,
+
+    #[serde(default)]
+    pub deny: Vec<String>,
+}
+
+impl AgentPermissionsConfig {
+    #[must_use]
+    pub fn new(default: PermissionDefault) -> Self {
+        Self {
+            default,
+            allow: Vec::new(),
+            ask: Vec::new(),
+            auto: Vec::new(),
+            deny: Vec::new(),
+        }
+    }
+}
+
 /// Permission system configuration - Controls command resolution, audit logging, and caching
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -49,6 +91,10 @@ pub struct PermissionsConfig {
     /// Rules that require an interactive prompt when they match.
     #[serde(default)]
     pub ask: Vec<String>,
+
+    /// Rules that classifier-backed auto mode may approve when they match.
+    #[serde(default)]
+    pub auto: Vec<String>,
 
     /// Rules that deny matching tool calls.
     #[serde(default)]
@@ -249,6 +295,7 @@ impl Default for PermissionsConfig {
             auto_mode: AutoModeConfig::default(),
             allow: Vec::new(),
             ask: Vec::new(),
+            auto: Vec::new(),
             deny: Vec::new(),
             enabled: default_enabled(),
             resolve_commands: default_resolve_commands(),
@@ -265,7 +312,28 @@ impl Default for PermissionsConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::{PermissionMode, PermissionsConfig};
+    use super::{AgentPermissionsConfig, PermissionDefault, PermissionMode, PermissionsConfig};
+
+    #[test]
+    fn parses_agent_permission_defaults_and_empty_buckets() {
+        for (value, expected) in [
+            ("ask", PermissionDefault::Ask),
+            ("allow", PermissionDefault::Allow),
+            ("auto", PermissionDefault::Auto),
+            ("deny", PermissionDefault::Deny),
+        ] {
+            let config: AgentPermissionsConfig =
+                toml::from_str(&format!(r#"default = "{value}""#)).expect("agent permissions");
+            assert_eq!(config.default, expected);
+            assert!(config.allow.is_empty());
+            assert!(config.ask.is_empty());
+            assert!(config.auto.is_empty());
+            assert!(config.deny.is_empty());
+        }
+
+        let err = toml::from_str::<AgentPermissionsConfig>(r#"default = "plan""#).unwrap_err();
+        assert!(err.to_string().contains("unknown variant"));
+    }
 
     #[test]
     fn parses_claude_style_mode_aliases() {
