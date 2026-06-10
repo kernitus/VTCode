@@ -1138,9 +1138,9 @@ fn apply_plugin_restrictions(spec: &mut SubagentSpec) {
 fn parse_required_permissions(
     object: &JsonMap<String, JsonValue>,
 ) -> Result<AgentPermissionsConfig> {
-    for legacy_field in object
+    if let Some(legacy_field) = object
         .keys()
-        .filter(|field| is_legacy_permission_field(field))
+        .find(|field| is_legacy_permission_field(field))
     {
         bail!("unsupported legacy subagent field '{legacy_field}'; use 'permissions.default'");
     }

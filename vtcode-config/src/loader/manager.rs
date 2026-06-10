@@ -201,7 +201,12 @@ impl ConfigManager {
             ConfigLayerSource::Workspace { .. } => ConfigLayerSource::Workspace {
                 file: resolved_file.clone(),
             },
-            ConfigLayerSource::Runtime => unreachable!(),
+            ConfigLayerSource::Runtime => {
+                return Some(ConfigLayerEntry::new(
+                    ConfigLayerSource::Runtime,
+                    toml::Value::Table(toml::Table::new()),
+                ));
+            }
         };
 
         match Self::load_toml_from_file(&resolved_file) {
