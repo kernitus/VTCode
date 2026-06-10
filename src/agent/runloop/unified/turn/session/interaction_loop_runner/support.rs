@@ -899,7 +899,7 @@ async fn sync_primary_agent_hook_runtime(ctx: &mut InteractionLoopContext<'_>) -
         &hooks_config,
         SessionStartTrigger::Startup,
         ctx.thread_id,
-        cfg.permissions.default_mode,
+        vtcode_core::config::PermissionMode::Default,
     )?;
     if let (Some(hooks), Some(path)) = (next.as_ref(), transcript_path) {
         hooks.update_transcript_path(Some(path)).await;
@@ -1038,6 +1038,7 @@ mod tests {
     use std::sync::Arc;
     use tempfile::TempDir;
     use tokio::sync::RwLock;
+    use vtcode_config::core::permissions::{AgentPermissionsConfig, PermissionDefault};
     use vtcode_config::{SubagentSource, SubagentSpec};
 
     #[test]
@@ -1100,7 +1101,7 @@ mod tests {
             model: None,
             color: None,
             reasoning_effort: None,
-            permission_mode: None,
+            permissions: AgentPermissionsConfig::new(PermissionDefault::Ask),
             skills: Vec::new(),
             mcp_servers: Vec::new(),
             hooks: None,

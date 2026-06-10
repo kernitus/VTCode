@@ -17,18 +17,17 @@ use tokio::sync::{Notify, RwLock};
 use serde_json::Value;
 use vtcode_core::acp::{PermissionGrant, ToolPermissionCache};
 use vtcode_core::command_safety::parse_bash_lc_commands;
+use vtcode_core::config::PermissionsConfig;
 use vtcode_core::config::loader::ConfigManager;
-use vtcode_core::config::{PermissionMode, PermissionsConfig};
 use vtcode_core::core::interfaces::ui::UiSession;
 use vtcode_core::exec_policy::AskForApproval;
 use vtcode_core::hooks::{
-    LifecycleHookEngine, PermissionDecisionBehavior, PermissionDecisionScope, PermissionUpdateKind,
-    PreToolHookDecision,
+    LifecycleHookEngine, PermissionDecisionBehavior, PermissionDecisionScope, PreToolHookDecision,
 };
 use vtcode_core::permissions::{
-    PermissionRequest, PermissionRequestKind, build_permission_request, evaluate_permissions,
+    PermissionRequest, PermissionRequestKind, ResolvedPermissionDecision, build_permission_request,
+    evaluate_effective_permissions, evaluate_permissions,
 };
-use vtcode_core::primary_agent::clamp_primary_permission_mode;
 use vtcode_core::tool_policy::ToolPolicy;
 use vtcode_core::tools::registry::{ToolPermissionDecision, ToolRegistry};
 use vtcode_core::tools::{JustificationExtractor, ToolRiskScorer};
@@ -173,7 +172,8 @@ pub(crate) struct ToolPermissionsContext<'a, S: UiSession + ?Sized> {
         Option<&'a Arc<RwLock<vtcode_core::core::decision_tracker::DecisionTracker>>>,
     pub tool_permission_cache: Option<&'a Arc<RwLock<ToolPermissionCache>>>,
     pub permissions_state: Option<&'a Arc<RwLock<PermissionsConfig>>>,
-    pub permission_mode_override: Option<PermissionMode>,
+    pub active_agent_permissions:
+        Option<&'a vtcode_config::core::permissions::AgentPermissionsConfig>,
     pub hitl_notification_bell: bool,
     pub approval_policy: AskForApproval,
     pub skip_confirmations: bool,
@@ -182,31 +182,35 @@ pub(crate) struct ToolPermissionsContext<'a, S: UiSession + ?Sized> {
     pub session_stats: Option<&'a mut SessionStats>,
 }
 
-fn current_permission_mode(config: &PermissionsConfig) -> PermissionMode {
-    config.default_mode
-}
-
-fn effective_permissions_config(
-    config: &PermissionsConfig,
-    permission_mode: PermissionMode,
-) -> Option<PermissionsConfig> {
-    let mut effective = config.clone();
-    if permission_mode != PermissionMode::Auto || !effective.auto_mode.drop_broad_allow_rules {
-        return Some(effective);
-    }
-
-    let initial_rule_count = effective.allow.len();
-    effective
-        .allow
-        .retain(|rule| !is_broad_auto_mode_allow_rule(rule));
-    let dropped = initial_rule_count.saturating_sub(effective.allow.len());
-    if dropped > 0 {
-        tracing::trace!(
-            dropped_broad_allow_rules = dropped,
-            "auto mode filtered broad allow rules"
+fn resolve_permission_decision(
+    permissions: &PermissionsConfig,
+    active_agent_permissions: Option<&vtcode_config::core::permissions::AgentPermissionsConfig>,
+    workspace_root: &std::path::Path,
+    current_dir: &std::path::Path,
+    request: &PermissionRequest,
+) -> ResolvedPermissionDecision {
+    if let Some(agent_permissions) = active_agent_permissions {
+        return evaluate_effective_permissions(
+            permissions,
+            agent_permissions,
+            workspace_root,
+            current_dir,
+            request,
         );
     }
-    Some(effective)
+
+    let matches = evaluate_permissions(permissions, workspace_root, current_dir, request);
+    if matches.deny {
+        return ResolvedPermissionDecision::Deny;
+    }
+    if matches.ask {
+        return ResolvedPermissionDecision::Ask;
+    }
+    if matches.allow {
+        return ResolvedPermissionDecision::Allow;
+    }
+
+    ResolvedPermissionDecision::Ask
 }
 
 fn build_permission_suggestions(
@@ -286,11 +290,10 @@ async fn apply_permission_hook_updates(
                     "PermissionRequest hook ignored unsupported permission update `{field}`"
                 )));
             }
-            (destination, PermissionUpdateKind::SetMode(mode)) => {
-                next_permissions.default_mode = *mode;
-                changed = true;
-                persist_project |=
-                    matches!(destination, PermissionUpdateDestination::ProjectSettings);
+            (_, PermissionUpdateKind::SetMode(_)) => {
+                messages.push(HookMessage::warning(
+                    "PermissionRequest hook returned a legacy mode update; use permission rule updates instead.",
+                ));
             }
             (destination, PermissionUpdateKind::AddRules(rules)) => {
                 let rules = bounded_permission_rules("add_rules", rules, &mut messages);
@@ -422,8 +425,7 @@ fn map_permission_decision(
 fn should_allow_without_prompt(
     workspace_root: &std::path::Path,
     permission_request: &PermissionRequest,
-    permission_mode: PermissionMode,
-    permission_matches: &vtcode_core::permissions::PermissionRuleMatches,
+    permission_decision: ResolvedPermissionDecision,
     requires_rule_prompt: bool,
     requires_sandbox_prompt: bool,
 ) -> bool {
@@ -431,12 +433,9 @@ fn should_allow_without_prompt(
         return false;
     }
 
-    permission_matches.allow
-        || (permission_mode == PermissionMode::Auto
+    permission_decision == ResolvedPermissionDecision::Allow
+        || (permission_decision == ResolvedPermissionDecision::Auto
             && auto_mode_safe_builtin_allow(workspace_root, permission_request))
-        || (permission_mode == PermissionMode::AcceptEdits
-            && permission_request.builtin_file_mutation)
-        || permission_mode == PermissionMode::BypassPermissions
 }
 
 async fn reuse_saved_approval(
@@ -673,49 +672,6 @@ async fn finalize_permission_decision(
     }
 }
 
-fn is_broad_auto_mode_allow_rule(rule: &str) -> bool {
-    let normalized = rule.trim().to_ascii_lowercase();
-    if normalized.is_empty() {
-        return false;
-    }
-
-    if matches!(
-        normalized.as_str(),
-        "bash" | "bash(*)" | "unified_exec" | "run_pty_cmd" | "agent"
-    ) {
-        return true;
-    }
-
-    let interpreter_prefixes = [
-        "bash(python",
-        "bash(python3",
-        "bash(node",
-        "bash(ruby",
-        "bash(bash",
-        "bash(sh",
-        "bash(zsh",
-        "bash(fish",
-        "bash(pwsh",
-        "bash(powershell",
-    ];
-    if interpreter_prefixes
-        .iter()
-        .any(|prefix| normalized.starts_with(prefix))
-    {
-        return true;
-    }
-
-    [
-        "bash(npm run",
-        "bash(pnpm run",
-        "bash(yarn run",
-        "bash(cargo run",
-        "bash(uv run",
-    ]
-    .iter()
-    .any(|prefix| normalized.starts_with(prefix))
-}
-
 fn auto_mode_safe_builtin_allow(
     workspace_root: &std::path::Path,
     request: &PermissionRequest,
@@ -761,7 +717,7 @@ fn headless_auto_mode_fallback_reason(
     reason
 }
 
-async fn resolve_auto_mode_permission(
+async fn resolve_auto_permission(
     renderer: &mut AnsiRenderer,
     tool_registry: &ToolRegistry,
     tool_name: &str,
@@ -971,7 +927,7 @@ pub(crate) async fn ensure_tool_permission_with_call_id<S: UiSession + ?Sized>(
         decision_ledger,
         tool_permission_cache,
         permissions_state,
-        permission_mode_override,
+        active_agent_permissions,
         hitl_notification_bell,
         approval_policy,
         skip_confirmations,
@@ -1029,44 +985,33 @@ pub(crate) async fn ensure_tool_permission_with_call_id<S: UiSession + ?Sized>(
 
     let current_dir =
         std::env::current_dir().unwrap_or_else(|_| tool_registry.workspace_root().clone());
-    let mut permissions_snapshot = if let Some(state) = permissions_state {
+    let permissions_snapshot = if let Some(state) = permissions_state {
         state.read().await.clone()
     } else {
         permissions_config.cloned().unwrap_or_default()
     };
-    let base_permission_mode = permissions_snapshot.default_mode;
-    permissions_snapshot.default_mode =
-        clamp_primary_permission_mode(base_permission_mode, permission_mode_override);
-    let session_override_narrows_permissions = permission_mode_override.is_some()
-        && permissions_snapshot.default_mode != base_permission_mode;
-    let permission_mode = current_permission_mode(&permissions_snapshot);
-    let effective_permissions =
-        effective_permissions_config(&permissions_snapshot, permission_mode);
     let permission_request = build_permission_request(
         tool_registry.workspace_root(),
         &current_dir,
         &normalized_tool_name,
         tool_args,
     );
-    let permission_matches = effective_permissions
-        .as_ref()
-        .map(|config| {
-            evaluate_permissions(
-                config,
-                tool_registry.workspace_root(),
-                &current_dir,
-                &permission_request,
-            )
-        })
-        .unwrap_or_default();
+    let permission_decision = resolve_permission_decision(
+        &permissions_snapshot,
+        active_agent_permissions,
+        tool_registry.workspace_root(),
+        &current_dir,
+        &permission_request,
+    );
 
-    if permission_matches.deny {
+    if permission_decision == ResolvedPermissionDecision::Deny {
         return Ok(ToolPermissionFlow::Denied);
     }
     let requires_protected_write_prompt = permission_request.requires_protected_write_prompt();
-    let requires_rule_prompt =
-        hook_requires_prompt || permission_matches.ask || requires_protected_write_prompt;
-    let auto_mode_classifier_review = permission_mode == PermissionMode::Auto
+    let requires_rule_prompt = hook_requires_prompt
+        || permission_decision == ResolvedPermissionDecision::Ask
+        || requires_protected_write_prompt;
+    let auto_mode_classifier_review = permission_decision == ResolvedPermissionDecision::Auto
         && !requires_rule_prompt
         && !auto_mode_safe_builtin_allow(tool_registry.workspace_root(), &permission_request);
     let policy_decision = tool_registry.evaluate_tool_policy(tool_name).await?;
@@ -1130,16 +1075,11 @@ pub(crate) async fn ensure_tool_permission_with_call_id<S: UiSession + ?Sized>(
     if should_allow_without_prompt(
         tool_registry.workspace_root(),
         &permission_request,
-        permission_mode,
-        &permission_matches,
+        permission_decision,
         requires_rule_prompt,
         requires_sandbox_prompt,
     ) {
         return Ok(approve_tool_permission_no_cache(tool_registry, tool_name).await);
-    }
-
-    if permission_mode == PermissionMode::DontAsk {
-        return Ok(ToolPermissionFlow::Denied);
     }
 
     if policy_decision == ToolPermissionDecision::Allow
@@ -1150,13 +1090,13 @@ pub(crate) async fn ensure_tool_permission_with_call_id<S: UiSession + ?Sized>(
         return Ok(approve_tool_permission_no_cache(tool_registry, tool_name).await);
     }
 
-    if skip_confirmations && !session_override_narrows_permissions {
+    if skip_confirmations && active_agent_permissions.is_none() {
         return Ok(approve_tool_permission_no_cache(tool_registry, tool_name).await);
     }
 
     let mut requires_auto_fallback_prompt = false;
     if auto_mode_classifier_review {
-        match resolve_auto_mode_permission(
+        match resolve_auto_permission(
             renderer,
             tool_registry,
             &normalized_tool_name,
@@ -1223,14 +1163,6 @@ pub(crate) async fn ensure_tool_permission_with_call_id<S: UiSession + ?Sized>(
                             &decision.permission_updates,
                         )
                         .await;
-                        if decision
-                            .permission_updates
-                            .iter()
-                            .any(|update| matches!(update.kind, PermissionUpdateKind::SetMode(_)))
-                        {
-                            let current_mode = permissions_state.read().await.default_mode;
-                            hooks.update_permission_mode(current_mode).await;
-                        }
                         update_messages
                     } else if !decision.permission_updates.is_empty() {
                         vec![vtcode_core::hooks::HookMessage::warning(

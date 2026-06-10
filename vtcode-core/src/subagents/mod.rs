@@ -2379,7 +2379,10 @@ Inspect the repository.
             .into_iter()
             .find(|spec| spec.name == "worker")
             .expect("worker");
-        spec.permissions = AgentPermissionsConfig::new(PermissionDefault::Auto);
+        spec.permissions = AgentPermissionsConfig {
+            auto: vec!["Bash(*)".to_string()],
+            ..AgentPermissionsConfig::new(PermissionDefault::Auto)
+        };
         spec.tools = Some(vec![
             tools::SPAWN_AGENT.to_string(),
             tools::UNIFIED_SEARCH.to_string(),
@@ -2387,6 +2390,10 @@ Inspect the repository.
         ]);
 
         let child = build_child_config(&parent, &spec, models::openai::GPT_5_4, None);
+        assert_eq!(
+            child.runtime_agent_permissions.as_ref(),
+            Some(&spec.permissions)
+        );
         assert_eq!(
             child.permissions.allow,
             vec![

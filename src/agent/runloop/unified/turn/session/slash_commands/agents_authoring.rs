@@ -4,6 +4,7 @@ type YamlMapping = serde_json::Map<String, YamlValue>;
 use std::collections::{BTreeSet, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use vtcode_config::core::permissions::{AgentPermissionsConfig, PermissionDefault};
 #[cfg(test)]
 use vtcode_config::load_subagent_from_file;
 use vtcode_config::{SubagentMemoryScope, SubagentSource, SubagentSpec};
@@ -220,7 +221,7 @@ impl NativeAgentDraft {
             model: spec.model.clone().unwrap_or_else(|| "inherit".to_string()),
             color: spec.color.clone(),
             reasoning_effort: spec.reasoning_effort.clone(),
-            permission_mode: spec.permission_mode,
+            permission_mode: permission_mode_from_agent_permissions(&spec.permissions),
             background: spec.background,
             max_turns: spec.max_turns,
             memory: spec.memory,
@@ -1465,6 +1466,17 @@ fn permission_mode_from_action(action: &str) -> Option<Option<PermissionMode>> {
     }
 }
 
+fn permission_mode_from_agent_permissions(
+    permissions: &AgentPermissionsConfig,
+) -> Option<PermissionMode> {
+    match permissions.default {
+        PermissionDefault::Ask => Some(PermissionMode::Default),
+        PermissionDefault::Allow => Some(PermissionMode::BypassPermissions),
+        PermissionDefault::Auto => Some(PermissionMode::Auto),
+        PermissionDefault::Deny => Some(PermissionMode::Plan),
+    }
+}
+
 fn memory_scope_label(scope: &SubagentMemoryScope) -> &'static str {
     match scope {
         SubagentMemoryScope::User => "user",
@@ -1735,7 +1747,7 @@ Review the target changes."#,
             model: Some("inherit".to_string()),
             color: Some("blue".to_string()),
             reasoning_effort: Some("medium".to_string()),
-            permission_mode: None,
+            permissions: AgentPermissionsConfig::new(PermissionDefault::Ask),
             skills: Vec::new(),
             mcp_servers: Vec::new(),
             hooks: None,

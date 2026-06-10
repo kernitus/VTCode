@@ -19,6 +19,7 @@ use crate::agent::runloop::unified::inline_events::harness::{
 };
 use crate::agent::runloop::unified::run_loop_context::HarnessTurnState;
 use crate::agent::runloop::unified::run_loop_context::RecoveryMode;
+use crate::agent::runloop::unified::run_loop_context::RunLoopContext;
 use crate::agent::runloop::unified::run_loop_context::TurnPhase;
 use crate::agent::runloop::unified::tool_call_safety::ToolCallSafetyValidator;
 use crate::agent::runloop::unified::turn::context::TurnLoopResult;
@@ -217,9 +218,7 @@ impl<'a> TurnLoopContext<'a> {
         }
     }
 
-    pub(crate) fn as_run_loop_context(
-        &mut self,
-    ) -> crate::agent::runloop::unified::run_loop_context::RunLoopContext<'_> {
+    pub(crate) fn as_run_loop_context(&mut self) -> RunLoopContext<'_> {
         let auto_mode = Some(
             crate::agent::runloop::unified::run_loop_context::AutoModeRuntimeContext {
                 config: self.config,
@@ -229,7 +228,7 @@ impl<'a> TurnLoopContext<'a> {
             },
         );
 
-        crate::agent::runloop::unified::run_loop_context::RunLoopContext::new_with_auto_mode_context(
+        let mut ctx = RunLoopContext::new_with_auto_mode_context(
             self.renderer,
             self.handle,
             self.tool_registry,
@@ -247,7 +246,12 @@ impl<'a> TurnLoopContext<'a> {
             self.harness_state,
             self.harness_emitter,
             auto_mode,
-        )
+        );
+        ctx.active_agent_permissions = self
+            .vt_cfg
+            .and_then(|cfg| cfg.runtime_agent_permissions.as_ref())
+            .or(Some(&self.active_primary_agent.active().permissions));
+        ctx
     }
 
     pub(crate) fn as_turn_processing_context<'b>(

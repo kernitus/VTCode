@@ -41,7 +41,7 @@ use vtcode_core::tools::registry::ToolExecutionError;
 use vtcode_core::utils::ansi::AnsiRenderer;
 use vtcode_ui::tui::app::InlineHandle;
 
-use crate::agent::runloop::unified::run_loop_context::RecoveryMode;
+use crate::agent::runloop::unified::run_loop_context::{RecoveryMode, RunLoopContext};
 use crate::agent::runloop::unified::state::CtrlCState;
 
 pub(crate) use self::runtime_context::{

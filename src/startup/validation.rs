@@ -8,38 +8,22 @@ use vtcode_core::utils::path::canonicalize_workspace;
 
 pub(super) fn apply_permission_mode_override(config: &mut VTCodeConfig, mode: &str) -> Result<()> {
     use vtcode_config::constants::tools;
-    use vtcode_core::config::PermissionMode;
 
     match mode.to_lowercase().as_str() {
-        "default" => {
-            config.permissions.default_mode = PermissionMode::Default;
-        }
-        "accept_edits" | "accept-edits" | "acceptedits" => {
-            config.permissions.default_mode = PermissionMode::AcceptEdits;
-        }
-        "auto" | "trusted_auto" | "trusted-auto" => {
-            config.permissions.default_mode = PermissionMode::Auto;
-        }
-        "dont_ask" | "dont-ask" | "dontask" => {
-            config.permissions.default_mode = PermissionMode::DontAsk;
-        }
-        "bypass_permissions" | "bypass-permissions" | "bypasspermissions" => {
-            config.permissions.default_mode = PermissionMode::BypassPermissions;
-        }
+        "default" | "accept_edits" | "accept-edits" | "acceptedits" | "auto" | "trusted_auto"
+        | "trusted-auto" | "dont_ask" | "dont-ask" | "dontask" | "bypass_permissions"
+        | "bypass-permissions" | "bypasspermissions" => {}
         "ask" => {
-            config.permissions.default_mode = PermissionMode::Default;
             config.security.human_in_the_loop = true;
             config.security.require_write_tool_for_claims = true;
             config.automation.full_auto.enabled = false;
         }
         "suggest" => {
-            config.permissions.default_mode = PermissionMode::Default;
             config.security.human_in_the_loop = true;
             config.security.require_write_tool_for_claims = false;
             config.automation.full_auto.enabled = false;
         }
         "auto-approved" => {
-            config.permissions.default_mode = PermissionMode::AcceptEdits;
             config.security.human_in_the_loop = false;
             config.security.require_write_tool_for_claims = false;
             config.automation.full_auto.enabled = true;
@@ -50,16 +34,12 @@ pub(super) fn apply_permission_mode_override(config: &mut VTCodeConfig, mode: &s
             ];
         }
         "full-auto" => {
-            config.permissions.default_mode = PermissionMode::BypassPermissions;
             config.security.human_in_the_loop = false;
             config.security.require_write_tool_for_claims = false;
             config.automation.full_auto.enabled = true;
             config.automation.full_auto.allowed_tools = vec![];
         }
-        "plan" => {
-            config.permissions.default_mode = PermissionMode::Plan;
-            return Ok(());
-        }
+        "plan" => {}
         _ => {
             bail!(
                 "Invalid permission mode '{}'. Valid options: default, accept_edits, auto, dont_ask, bypass_permissions, ask, suggest, auto-approved, full-auto, trusted_auto, plan",

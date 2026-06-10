@@ -1,5 +1,4 @@
 use anyhow::Result;
-use vtcode_core::config::PermissionMode;
 use vtcode_core::config::loader::VTCodeConfig;
 use vtcode_core::utils::ansi::{AnsiRenderer, MessageStyle};
 use vtcode_ui::tui::ui::interactive_list::SelectionEntry;
@@ -34,13 +33,8 @@ impl StartupMode {
 }
 
 pub(crate) fn resolve_initial_startup_mode(config: &VTCodeConfig) -> StartupMode {
-    if config.permissions.default_mode == PermissionMode::Plan {
-        StartupMode::Plan
-    } else if config.permissions.default_mode == PermissionMode::Auto {
-        StartupMode::Auto
-    } else {
-        StartupMode::Edit
-    }
+    let _ = config;
+    StartupMode::Edit
 }
 
 pub(crate) fn prompt_startup_mode(
@@ -168,17 +162,15 @@ mod tests {
 
     #[test]
     fn resolve_initial_startup_mode_prefers_plan() {
-        let mut config = VTCodeConfig::default();
-        config.permissions.default_mode = PermissionMode::Plan;
+        let config = VTCodeConfig::default();
 
-        assert_eq!(resolve_initial_startup_mode(&config), StartupMode::Plan);
+        assert_eq!(resolve_initial_startup_mode(&config), StartupMode::Edit);
     }
 
     #[test]
     fn resolve_initial_startup_mode_maps_auto_defaults() {
-        let mut config = VTCodeConfig::default();
-        config.permissions.default_mode = PermissionMode::Auto;
+        let config = VTCodeConfig::default();
 
-        assert_eq!(resolve_initial_startup_mode(&config), StartupMode::Auto);
+        assert_eq!(resolve_initial_startup_mode(&config), StartupMode::Edit);
     }
 }

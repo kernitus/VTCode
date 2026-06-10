@@ -92,6 +92,7 @@ fn build_child_config_from_runtime(
 ) -> VTCodeConfig {
     let mut child = parent.clone();
     child.agent.default_model = model.to_string();
+    child.runtime_agent_permissions = Some(runtime.permissions.clone());
     if let Some(max_turns) = normalize_child_max_turns(max_turns) {
         child.automation.full_auto.max_turns = max_turns;
     }

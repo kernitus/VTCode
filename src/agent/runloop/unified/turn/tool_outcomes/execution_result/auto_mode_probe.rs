@@ -9,10 +9,7 @@ async fn auto_mode_probe_warning(
     tool_name: &str,
     content_for_model: &str,
 ) -> Option<ProbeWarning> {
-    if !ctx.vt_cfg.is_some_and(|cfg| {
-        cfg.permissions.default_mode == vtcode_core::config::PermissionMode::Auto
-    }) || !ctx.session_stats.is_autonomous_mode()
-    {
+    if !ctx.session_stats.is_autonomous_mode() {
         return None;
     }
 

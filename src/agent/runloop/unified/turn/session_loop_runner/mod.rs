@@ -445,9 +445,10 @@ pub(super) async fn run_single_agent_loop_unified_impl(
             }
         }
         if !session_stats.is_plan_mode() {
-            session_stats.set_autonomous_mode(vt_cfg.as_ref().is_some_and(|cfg| {
-                cfg.permissions.default_mode == vtcode_core::config::PermissionMode::Auto
-            }));
+            session_stats.set_autonomous_mode(
+                active_primary_agent.active().permissions.default
+                    == vtcode_config::core::permissions::PermissionDefault::Auto,
+            );
         }
         header_context.autonomous_mode = session_stats.is_autonomous_mode();
         handle.set_autonomous_mode(session_stats.is_autonomous_mode());

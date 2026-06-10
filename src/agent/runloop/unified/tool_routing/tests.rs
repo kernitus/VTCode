@@ -11,12 +11,13 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::sync::{Notify, RwLock};
 use vtcode_config::core::PromptCachingConfig;
+use vtcode_config::core::permissions::{AgentPermissionsConfig, PermissionDefault};
 use vtcode_core::acp::{PermissionGrant, ToolPermissionCache};
+use vtcode_core::config::PermissionsConfig;
 use vtcode_core::config::constants::tools;
 use vtcode_core::config::loader::ConfigManager;
 use vtcode_core::config::types::AgentConfig as CoreAgentConfig;
 use vtcode_core::config::types::{ModelSelectionSource, ReasoningEffortLevel, UiSurfacePreference};
-use vtcode_core::config::{PermissionMode, PermissionsConfig};
 use vtcode_core::core::agent::snapshots::{
     DEFAULT_CHECKPOINTS_ENABLED, DEFAULT_MAX_AGE_DAYS, DEFAULT_MAX_SNAPSHOTS,
 };
@@ -381,7 +382,7 @@ async fn skip_confirmations_does_not_bypass_cached_tool_denial() {
             decision_ledger: None,
             tool_permission_cache: Some(&permission_cache),
             permissions_state: None,
-            permission_mode_override: None,
+            active_agent_permissions: None,
             hitl_notification_bell: false,
             approval_policy: AskForApproval::OnRequest,
             skip_confirmations: true,
@@ -434,7 +435,7 @@ async fn tool_policy_deny_overrides_cached_session_approval() {
             decision_ledger: None,
             tool_permission_cache: Some(&permission_cache),
             permissions_state: None,
-            permission_mode_override: None,
+            active_agent_permissions: None,
             hitl_notification_bell: false,
             approval_policy: AskForApproval::OnRequest,
             skip_confirmations: false,
@@ -453,7 +454,7 @@ async fn tool_policy_deny_overrides_cached_session_approval() {
 }
 
 #[tokio::test]
-async fn dont_ask_mode_denies_non_allowed_requests() {
+async fn active_agent_deny_default_denies_non_allowed_requests() {
     let temp_dir = tempfile::TempDir::new().expect("temp dir");
     let registry = ToolRegistry::new(temp_dir.path().to_path_buf()).await;
     let mut session = create_headless_session();
@@ -461,10 +462,8 @@ async fn dont_ask_mode_denies_non_allowed_requests() {
     let mut renderer = AnsiRenderer::with_inline_ui(handle.clone(), Default::default());
     let ctrl_c_state = Arc::new(crate::agent::runloop::unified::state::CtrlCState::new());
     let ctrl_c_notify = Arc::new(Notify::new());
-    let permissions = PermissionsConfig {
-        default_mode: PermissionMode::DontAsk,
-        ..PermissionsConfig::default()
-    };
+    let permissions = PermissionsConfig::default();
+    let agent_permissions = AgentPermissionsConfig::new(PermissionDefault::Deny);
 
     let flow = ensure_tool_permission(
         ToolPermissionsContext {
@@ -481,7 +480,7 @@ async fn dont_ask_mode_denies_non_allowed_requests() {
             decision_ledger: None,
             tool_permission_cache: None,
             permissions_state: None,
-            permission_mode_override: None,
+            active_agent_permissions: Some(&agent_permissions),
             hitl_notification_bell: false,
             approval_policy: AskForApproval::OnRequest,
             skip_confirmations: false,
@@ -500,7 +499,7 @@ async fn dont_ask_mode_denies_non_allowed_requests() {
 }
 
 #[tokio::test]
-async fn dont_ask_mode_allows_explicitly_allowed_tools() {
+async fn matching_allow_rule_allows_tool_call() {
     let temp_dir = tempfile::TempDir::new().expect("temp dir");
     let registry = ToolRegistry::new(temp_dir.path().to_path_buf()).await;
     let mut session = create_headless_session();
@@ -509,7 +508,6 @@ async fn dont_ask_mode_allows_explicitly_allowed_tools() {
     let ctrl_c_state = Arc::new(crate::agent::runloop::unified::state::CtrlCState::new());
     let ctrl_c_notify = Arc::new(Notify::new());
     let permissions = PermissionsConfig {
-        default_mode: PermissionMode::DontAsk,
         allow: vec![tools::READ_FILE.to_string()],
         ..PermissionsConfig::default()
     };
@@ -529,7 +527,7 @@ async fn dont_ask_mode_allows_explicitly_allowed_tools() {
             decision_ledger: None,
             tool_permission_cache: None,
             permissions_state: None,
-            permission_mode_override: None,
+            active_agent_permissions: None,
             hitl_notification_bell: false,
             approval_policy: AskForApproval::OnRequest,
             skip_confirmations: false,
@@ -548,7 +546,7 @@ async fn dont_ask_mode_allows_explicitly_allowed_tools() {
 }
 
 #[tokio::test]
-async fn permission_mode_override_narrows_but_does_not_broaden() {
+async fn active_agent_auto_rule_enters_classifier_review() {
     let temp_dir = tempfile::TempDir::new().expect("temp dir");
     let registry = ToolRegistry::new(temp_dir.path().to_path_buf()).await;
     let mut session = create_headless_session();
@@ -556,12 +554,21 @@ async fn permission_mode_override_narrows_but_does_not_broaden() {
     let mut renderer = AnsiRenderer::with_inline_ui(handle.clone(), Default::default());
     let ctrl_c_state = Arc::new(crate::agent::runloop::unified::state::CtrlCState::new());
     let ctrl_c_notify = Arc::new(Notify::new());
-    let accept_edits_permissions = PermissionsConfig {
-        default_mode: PermissionMode::AcceptEdits,
-        ..PermissionsConfig::default()
+    let permissions = PermissionsConfig::default();
+    let agent_permissions = AgentPermissionsConfig {
+        default: PermissionDefault::Ask,
+        auto: vec!["Bash(*)".to_string()],
+        ..AgentPermissionsConfig::new(PermissionDefault::Ask)
     };
+    let mut provider = StaticProvider {
+        responses: std::sync::Mutex::new(vec!["ALLOW".to_string()]),
+    };
+    let config = runtime_config();
+    let history = vec![uni::Message::user("inspect the project".to_string())];
+    let mut session_stats = SessionStats::default();
+    session_stats.set_autonomous_mode(true);
 
-    let narrowed = ensure_tool_permission(
+    let flow = ensure_tool_permission(
         ToolPermissionsContext {
             tool_registry: &registry,
             renderer: &mut renderer,
@@ -576,62 +583,36 @@ async fn permission_mode_override_narrows_but_does_not_broaden() {
             decision_ledger: None,
             tool_permission_cache: None,
             permissions_state: None,
-            permission_mode_override: Some(PermissionMode::DontAsk),
+            active_agent_permissions: Some(&agent_permissions),
             hitl_notification_bell: false,
             approval_policy: AskForApproval::OnRequest,
             skip_confirmations: false,
-            permissions_config: Some(&accept_edits_permissions),
-            auto_mode_runtime: None,
+            permissions_config: Some(&permissions),
+            auto_mode_runtime: Some(AutoModeRuntimeContext {
+                config: &config,
+                vt_cfg: None,
+                provider_client: &mut provider,
+                working_history: &history,
+            }),
             active_thread_label: None,
-            session_stats: None,
+            session_stats: Some(&mut session_stats),
         },
-        tools::UNIFIED_FILE,
-        Some(&json!({"action": "write", "path": "notes.md", "content": "hello"})),
+        tools::UNIFIED_EXEC,
+        Some(&json!({"action": "run", "command": "echo hi"})),
     )
     .await
-    .expect("narrowed permission flow");
+    .expect("permission flow");
 
-    assert_eq!(narrowed, ToolPermissionFlow::Denied);
-
-    let dont_ask_permissions = PermissionsConfig {
-        default_mode: PermissionMode::DontAsk,
-        ..PermissionsConfig::default()
-    };
-    let broadened = ensure_tool_permission(
-        ToolPermissionsContext {
-            tool_registry: &registry,
-            renderer: &mut renderer,
-            handle: &handle,
-            session: &mut session,
-            default_placeholder: None,
-            ctrl_c_state: &ctrl_c_state,
-            ctrl_c_notify: &ctrl_c_notify,
-            hooks: None,
-            justification: None,
-            approval_recorder: None,
-            decision_ledger: None,
-            tool_permission_cache: None,
-            permissions_state: None,
-            permission_mode_override: Some(PermissionMode::BypassPermissions),
-            hitl_notification_bell: false,
-            approval_policy: AskForApproval::OnRequest,
-            skip_confirmations: false,
-            permissions_config: Some(&dont_ask_permissions),
-            auto_mode_runtime: None,
-            active_thread_label: None,
-            session_stats: None,
-        },
-        tools::READ_FILE,
-        Some(&json!({"path": "README.md"})),
-    )
-    .await
-    .expect("clamped permission flow");
-
-    assert_eq!(broadened, ToolPermissionFlow::Denied);
+    assert_eq!(flow, ToolPermissionFlow::Approved { updated_args: None });
+    assert_eq!(
+        provider.responses.lock().expect("responses lock").len(),
+        0,
+        "auto rule should consume the classifier response"
+    );
 }
 
 #[tokio::test]
-async fn narrowing_permission_override_disables_skip_confirmations_auto_approval() {
+async fn active_agent_permissions_restrict_global_direct_allow() {
     let temp_dir = tempfile::TempDir::new().expect("temp dir");
     let registry = ToolRegistry::new(temp_dir.path().to_path_buf()).await;
     let mut session = create_headless_session();
@@ -640,9 +621,108 @@ async fn narrowing_permission_override_disables_skip_confirmations_auto_approval
     let ctrl_c_state = Arc::new(crate::agent::runloop::unified::state::CtrlCState::new());
     let ctrl_c_notify = Arc::new(Notify::new());
     let permissions = PermissionsConfig {
-        default_mode: PermissionMode::BypassPermissions,
-        ask: vec!["Write(/docs/**)".to_string()],
+        allow: vec![tools::UNIFIED_FILE.to_string()],
         ..PermissionsConfig::default()
+    };
+    let agent_permissions = AgentPermissionsConfig::new(PermissionDefault::Deny);
+
+    let flow = ensure_tool_permission(
+        ToolPermissionsContext {
+            tool_registry: &registry,
+            renderer: &mut renderer,
+            handle: &handle,
+            session: &mut session,
+            default_placeholder: None,
+            ctrl_c_state: &ctrl_c_state,
+            ctrl_c_notify: &ctrl_c_notify,
+            hooks: None,
+            justification: None,
+            approval_recorder: None,
+            decision_ledger: None,
+            tool_permission_cache: None,
+            permissions_state: None,
+            active_agent_permissions: Some(&agent_permissions),
+            hitl_notification_bell: false,
+            approval_policy: AskForApproval::OnRequest,
+            skip_confirmations: false,
+            permissions_config: Some(&permissions),
+            auto_mode_runtime: None,
+            active_thread_label: None,
+            session_stats: None,
+        },
+        tools::UNIFIED_FILE,
+        Some(&json!({"action": "write", "path": "notes.md", "content": "hello"})),
+    )
+    .await
+    .expect("permission flow");
+
+    assert_eq!(flow, ToolPermissionFlow::Denied);
+}
+
+#[tokio::test]
+async fn subagent_local_permissions_restrict_global_direct_allow() {
+    let temp_dir = tempfile::TempDir::new().expect("temp dir");
+    let registry = ToolRegistry::new(temp_dir.path().to_path_buf()).await;
+    let mut session = create_headless_session();
+    let handle = session.clone_inline_handle();
+    let mut renderer = AnsiRenderer::with_inline_ui(handle.clone(), Default::default());
+    let ctrl_c_state = Arc::new(crate::agent::runloop::unified::state::CtrlCState::new());
+    let ctrl_c_notify = Arc::new(Notify::new());
+    let permissions = PermissionsConfig {
+        allow: vec![tools::UNIFIED_FILE.to_string()],
+        ..PermissionsConfig::default()
+    };
+    let subagent_permissions = AgentPermissionsConfig::new(PermissionDefault::Deny);
+
+    let flow = ensure_tool_permission(
+        ToolPermissionsContext {
+            tool_registry: &registry,
+            renderer: &mut renderer,
+            handle: &handle,
+            session: &mut session,
+            default_placeholder: None,
+            ctrl_c_state: &ctrl_c_state,
+            ctrl_c_notify: &ctrl_c_notify,
+            hooks: None,
+            justification: None,
+            approval_recorder: None,
+            decision_ledger: None,
+            tool_permission_cache: None,
+            permissions_state: None,
+            active_agent_permissions: Some(&subagent_permissions),
+            hitl_notification_bell: false,
+            approval_policy: AskForApproval::OnRequest,
+            skip_confirmations: false,
+            permissions_config: Some(&permissions),
+            auto_mode_runtime: None,
+            active_thread_label: None,
+            session_stats: None,
+        },
+        tools::UNIFIED_FILE,
+        Some(&json!({"action": "write", "path": "notes.md", "content": "hello"})),
+    )
+    .await
+    .expect("permission flow");
+
+    assert_eq!(flow, ToolPermissionFlow::Denied);
+}
+
+#[tokio::test]
+async fn active_agent_ask_disables_skip_confirmations_auto_approval() {
+    let temp_dir = tempfile::TempDir::new().expect("temp dir");
+    let registry = ToolRegistry::new(temp_dir.path().to_path_buf()).await;
+    let mut session = create_headless_session();
+    let handle = session.clone_inline_handle();
+    let mut renderer = AnsiRenderer::with_inline_ui(handle.clone(), Default::default());
+    let ctrl_c_state = Arc::new(crate::agent::runloop::unified::state::CtrlCState::new());
+    let ctrl_c_notify = Arc::new(Notify::new());
+    let permissions = PermissionsConfig {
+        ..PermissionsConfig::default()
+    };
+    let agent_permissions = AgentPermissionsConfig {
+        default: PermissionDefault::Allow,
+        ask: vec!["Write(/docs/**)".to_string()],
+        ..AgentPermissionsConfig::new(PermissionDefault::Allow)
     };
 
     let flow = ensure_tool_permission(
@@ -660,7 +740,7 @@ async fn narrowing_permission_override_disables_skip_confirmations_auto_approval
             decision_ledger: None,
             tool_permission_cache: None,
             permissions_state: None,
-            permission_mode_override: Some(PermissionMode::Default),
+            active_agent_permissions: Some(&agent_permissions),
             hitl_notification_bell: false,
             approval_policy: reject_all_approvals(),
             skip_confirmations: true,
@@ -679,7 +759,7 @@ async fn narrowing_permission_override_disables_skip_confirmations_auto_approval
 }
 
 #[tokio::test]
-async fn skip_confirmations_auto_approves_without_permission_override() {
+async fn skip_confirmations_auto_approves_without_active_agent_policy() {
     let temp_dir = tempfile::TempDir::new().expect("temp dir");
     let registry = ToolRegistry::new(temp_dir.path().to_path_buf()).await;
     let mut session = create_headless_session();
@@ -688,7 +768,6 @@ async fn skip_confirmations_auto_approves_without_permission_override() {
     let ctrl_c_state = Arc::new(crate::agent::runloop::unified::state::CtrlCState::new());
     let ctrl_c_notify = Arc::new(Notify::new());
     let permissions = PermissionsConfig {
-        default_mode: PermissionMode::BypassPermissions,
         ask: vec!["Write(/docs/**)".to_string()],
         ..PermissionsConfig::default()
     };
@@ -708,7 +787,7 @@ async fn skip_confirmations_auto_approves_without_permission_override() {
             decision_ledger: None,
             tool_permission_cache: None,
             permissions_state: None,
-            permission_mode_override: None,
+            active_agent_permissions: None,
             hitl_notification_bell: false,
             approval_policy: reject_all_approvals(),
             skip_confirmations: true,
@@ -727,7 +806,7 @@ async fn skip_confirmations_auto_approves_without_permission_override() {
 }
 
 #[tokio::test]
-async fn skip_confirmations_auto_approves_with_non_narrowing_permission_override() {
+async fn skip_confirmations_does_not_bypass_active_agent_ask_default() {
     let temp_dir = tempfile::TempDir::new().expect("temp dir");
     let registry = ToolRegistry::new(temp_dir.path().to_path_buf()).await;
     let mut session = create_headless_session();
@@ -736,10 +815,9 @@ async fn skip_confirmations_auto_approves_with_non_narrowing_permission_override
     let ctrl_c_state = Arc::new(crate::agent::runloop::unified::state::CtrlCState::new());
     let ctrl_c_notify = Arc::new(Notify::new());
     let permissions = PermissionsConfig {
-        default_mode: PermissionMode::Default,
-        ask: vec!["Write(/docs/**)".to_string()],
         ..PermissionsConfig::default()
     };
+    let agent_permissions = AgentPermissionsConfig::new(PermissionDefault::Ask);
 
     let flow = ensure_tool_permission(
         ToolPermissionsContext {
@@ -756,7 +834,7 @@ async fn skip_confirmations_auto_approves_with_non_narrowing_permission_override
             decision_ledger: None,
             tool_permission_cache: None,
             permissions_state: None,
-            permission_mode_override: Some(PermissionMode::BypassPermissions),
+            active_agent_permissions: Some(&agent_permissions),
             hitl_notification_bell: false,
             approval_policy: reject_all_approvals(),
             skip_confirmations: true,
@@ -771,11 +849,11 @@ async fn skip_confirmations_auto_approves_with_non_narrowing_permission_override
     .await
     .expect("permission flow");
 
-    assert_eq!(flow, ToolPermissionFlow::Approved { updated_args: None });
+    assert_eq!(flow, ToolPermissionFlow::Denied);
 }
 
 #[tokio::test]
-async fn accept_edits_mode_auto_allows_builtin_file_mutations() {
+async fn active_agent_allow_default_allows_builtin_file_mutations() {
     let temp_dir = tempfile::TempDir::new().expect("temp dir");
     let registry = ToolRegistry::new(temp_dir.path().to_path_buf()).await;
     let mut session = create_headless_session();
@@ -783,10 +861,8 @@ async fn accept_edits_mode_auto_allows_builtin_file_mutations() {
     let mut renderer = AnsiRenderer::with_inline_ui(handle.clone(), Default::default());
     let ctrl_c_state = Arc::new(crate::agent::runloop::unified::state::CtrlCState::new());
     let ctrl_c_notify = Arc::new(Notify::new());
-    let permissions = PermissionsConfig {
-        default_mode: PermissionMode::AcceptEdits,
-        ..PermissionsConfig::default()
-    };
+    let permissions = PermissionsConfig::default();
+    let agent_permissions = AgentPermissionsConfig::new(PermissionDefault::Allow);
 
     let flow = ensure_tool_permission(
         ToolPermissionsContext {
@@ -803,7 +879,7 @@ async fn accept_edits_mode_auto_allows_builtin_file_mutations() {
             decision_ledger: None,
             tool_permission_cache: None,
             permissions_state: None,
-            permission_mode_override: None,
+            active_agent_permissions: Some(&agent_permissions),
             hitl_notification_bell: false,
             approval_policy: AskForApproval::Reject(RejectConfig {
                 sandbox_approval: true,
@@ -827,7 +903,7 @@ async fn accept_edits_mode_auto_allows_builtin_file_mutations() {
 }
 
 #[tokio::test]
-async fn accept_edits_mode_keeps_protected_write_prompts() {
+async fn active_agent_allow_default_keeps_protected_write_prompts() {
     let temp_dir = tempfile::TempDir::new().expect("temp dir");
     let registry = ToolRegistry::new(temp_dir.path().to_path_buf()).await;
     let mut session = create_headless_session();
@@ -835,10 +911,8 @@ async fn accept_edits_mode_keeps_protected_write_prompts() {
     let mut renderer = AnsiRenderer::with_inline_ui(handle.clone(), Default::default());
     let ctrl_c_state = Arc::new(crate::agent::runloop::unified::state::CtrlCState::new());
     let ctrl_c_notify = Arc::new(Notify::new());
-    let permissions = PermissionsConfig {
-        default_mode: PermissionMode::AcceptEdits,
-        ..PermissionsConfig::default()
-    };
+    let permissions = PermissionsConfig::default();
+    let agent_permissions = AgentPermissionsConfig::new(PermissionDefault::Allow);
 
     let flow = ensure_tool_permission(
         ToolPermissionsContext {
@@ -855,7 +929,7 @@ async fn accept_edits_mode_keeps_protected_write_prompts() {
             decision_ledger: None,
             tool_permission_cache: None,
             permissions_state: None,
-            permission_mode_override: None,
+            active_agent_permissions: Some(&agent_permissions),
             hitl_notification_bell: false,
             approval_policy: AskForApproval::Reject(RejectConfig {
                 sandbox_approval: true,
@@ -879,7 +953,7 @@ async fn accept_edits_mode_keeps_protected_write_prompts() {
 }
 
 #[tokio::test]
-async fn bypass_permissions_keeps_protected_write_prompts() {
+async fn protected_write_prompts_without_matching_allow() {
     let temp_dir = tempfile::TempDir::new().expect("temp dir");
     let registry = ToolRegistry::new(temp_dir.path().to_path_buf()).await;
     let mut session = create_headless_session();
@@ -888,7 +962,6 @@ async fn bypass_permissions_keeps_protected_write_prompts() {
     let ctrl_c_state = Arc::new(crate::agent::runloop::unified::state::CtrlCState::new());
     let ctrl_c_notify = Arc::new(Notify::new());
     let permissions = PermissionsConfig {
-        default_mode: PermissionMode::BypassPermissions,
         ..PermissionsConfig::default()
     };
 
@@ -907,7 +980,7 @@ async fn bypass_permissions_keeps_protected_write_prompts() {
             decision_ledger: None,
             tool_permission_cache: None,
             permissions_state: None,
-            permission_mode_override: None,
+            active_agent_permissions: None,
             hitl_notification_bell: false,
             approval_policy: AskForApproval::Reject(RejectConfig {
                 sandbox_approval: true,
@@ -931,7 +1004,7 @@ async fn bypass_permissions_keeps_protected_write_prompts() {
 }
 
 #[tokio::test]
-async fn ask_rules_override_bypass_permissions_mode() {
+async fn matching_ask_rule_prompts_user() {
     let temp_dir = tempfile::TempDir::new().expect("temp dir");
     let registry = ToolRegistry::new(temp_dir.path().to_path_buf()).await;
     let mut session = create_headless_session();
@@ -940,7 +1013,6 @@ async fn ask_rules_override_bypass_permissions_mode() {
     let ctrl_c_state = Arc::new(crate::agent::runloop::unified::state::CtrlCState::new());
     let ctrl_c_notify = Arc::new(Notify::new());
     let permissions = PermissionsConfig {
-        default_mode: PermissionMode::BypassPermissions,
         ask: vec!["Write(/docs/**)".to_string()],
         ..PermissionsConfig::default()
     };
@@ -960,7 +1032,7 @@ async fn ask_rules_override_bypass_permissions_mode() {
             decision_ledger: None,
             tool_permission_cache: None,
             permissions_state: None,
-            permission_mode_override: None,
+            active_agent_permissions: None,
             hitl_notification_bell: false,
             approval_policy: AskForApproval::Reject(RejectConfig {
                 sandbox_approval: true,
@@ -984,7 +1056,7 @@ async fn ask_rules_override_bypass_permissions_mode() {
 }
 
 #[tokio::test]
-async fn disallowed_tools_override_bypass_permissions_mode() {
+async fn matching_deny_rule_denies_without_classifier_review() {
     let temp_dir = tempfile::TempDir::new().expect("temp dir");
     let registry = ToolRegistry::new(temp_dir.path().to_path_buf()).await;
     let mut session = create_headless_session();
@@ -993,10 +1065,18 @@ async fn disallowed_tools_override_bypass_permissions_mode() {
     let ctrl_c_state = Arc::new(crate::agent::runloop::unified::state::CtrlCState::new());
     let ctrl_c_notify = Arc::new(Notify::new());
     let permissions = PermissionsConfig {
-        default_mode: PermissionMode::BypassPermissions,
+        allow: vec![tools::UNIFIED_EXEC.to_string()],
         deny: vec![tools::UNIFIED_EXEC.to_string()],
         ..PermissionsConfig::default()
     };
+    let agent_permissions = AgentPermissionsConfig::new(PermissionDefault::Auto);
+    let mut provider = StaticProvider {
+        responses: std::sync::Mutex::new(vec!["ALLOW".to_string()]),
+    };
+    let config = runtime_config();
+    let history = vec![uni::Message::user("run the command".to_string())];
+    let mut session_stats = SessionStats::default();
+    session_stats.set_autonomous_mode(true);
 
     let flow = ensure_tool_permission(
         ToolPermissionsContext {
@@ -1013,14 +1093,19 @@ async fn disallowed_tools_override_bypass_permissions_mode() {
             decision_ledger: None,
             tool_permission_cache: None,
             permissions_state: None,
-            permission_mode_override: None,
+            active_agent_permissions: Some(&agent_permissions),
             hitl_notification_bell: false,
             approval_policy: AskForApproval::OnRequest,
             skip_confirmations: false,
             permissions_config: Some(&permissions),
-            auto_mode_runtime: None,
+            auto_mode_runtime: Some(AutoModeRuntimeContext {
+                config: &config,
+                vt_cfg: None,
+                provider_client: &mut provider,
+                working_history: &history,
+            }),
             active_thread_label: None,
-            session_stats: None,
+            session_stats: Some(&mut session_stats),
         },
         tools::UNIFIED_EXEC,
         Some(&json!({"action": "run", "command": "echo hi"})),
@@ -1029,6 +1114,11 @@ async fn disallowed_tools_override_bypass_permissions_mode() {
     .expect("permission flow");
 
     assert_eq!(flow, ToolPermissionFlow::Denied);
+    assert_eq!(
+        provider.responses.lock().expect("responses lock").len(),
+        1,
+        "deny rule should not consume the classifier response"
+    );
 }
 
 #[tokio::test]
@@ -1076,7 +1166,6 @@ async fn auto_mode_headless_fallback_returns_blocked_summary() {
     };
     let config = runtime_config();
     let permissions = PermissionsConfig {
-        default_mode: PermissionMode::Auto,
         auto_mode: vtcode_core::config::AutoModeConfig {
             max_consecutive_denials: 1,
             max_total_denials: 20,
@@ -1084,6 +1173,7 @@ async fn auto_mode_headless_fallback_returns_blocked_summary() {
         },
         ..PermissionsConfig::default()
     };
+    let agent_permissions = AgentPermissionsConfig::new(PermissionDefault::Auto);
     let history = vec![uni::Message::user("clean up the PR".to_string())];
     let mut session_stats = SessionStats::default();
     session_stats.set_autonomous_mode(true);
@@ -1103,7 +1193,7 @@ async fn auto_mode_headless_fallback_returns_blocked_summary() {
             decision_ledger: None,
             tool_permission_cache: None,
             permissions_state: None,
-            permission_mode_override: None,
+            active_agent_permissions: Some(&agent_permissions),
             hitl_notification_bell: false,
             approval_policy: AskForApproval::OnRequest,
             skip_confirmations: false,
@@ -1150,7 +1240,6 @@ async fn auto_mode_interactive_fallback_notice_is_emitted_once() {
     };
     let config = runtime_config();
     let permissions = PermissionsConfig {
-        default_mode: PermissionMode::Auto,
         auto_mode: vtcode_core::config::AutoModeConfig {
             max_consecutive_denials: 1,
             max_total_denials: 20,
@@ -1158,6 +1247,7 @@ async fn auto_mode_interactive_fallback_notice_is_emitted_once() {
         },
         ..PermissionsConfig::default()
     };
+    let agent_permissions = AgentPermissionsConfig::new(PermissionDefault::Auto);
     let history = vec![uni::Message::user("clean up the PR".to_string())];
     let mut session_stats = SessionStats::default();
     session_stats.set_autonomous_mode(true);
@@ -1177,7 +1267,7 @@ async fn auto_mode_interactive_fallback_notice_is_emitted_once() {
             decision_ledger: None,
             tool_permission_cache: None,
             permissions_state: None,
-            permission_mode_override: None,
+            active_agent_permissions: Some(&agent_permissions),
             hitl_notification_bell: false,
             approval_policy: AskForApproval::Reject(RejectConfig {
                 sandbox_approval: true,
@@ -1224,7 +1314,7 @@ async fn auto_mode_interactive_fallback_notice_is_emitted_once() {
             decision_ledger: None,
             tool_permission_cache: None,
             permissions_state: None,
-            permission_mode_override: None,
+            active_agent_permissions: Some(&agent_permissions),
             hitl_notification_bell: false,
             approval_policy: AskForApproval::Reject(RejectConfig {
                 sandbox_approval: true,

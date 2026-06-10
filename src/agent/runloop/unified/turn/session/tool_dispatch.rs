@@ -657,6 +657,7 @@ mod tests {
     use tempfile::TempDir;
     use vtcode_config::SubagentSource;
     use vtcode_config::SubagentSpec;
+    use vtcode_config::core::permissions::{AgentPermissionsConfig, PermissionDefault};
     use vtcode_core::config::constants::tools;
     use vtcode_core::llm::provider as uni;
 
@@ -670,7 +671,7 @@ mod tests {
             model: None,
             color: None,
             reasoning_effort: None,
-            permission_mode: None,
+            permissions: AgentPermissionsConfig::new(PermissionDefault::Ask),
             skills: Vec::new(),
             mcp_servers: Vec::new(),
             hooks: None,

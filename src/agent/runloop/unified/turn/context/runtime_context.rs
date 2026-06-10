@@ -326,9 +326,7 @@ impl<'a> TurnProcessingContext<'a> {
 
     /// Creates a RunLoopContext directly from this TurnProcessingContext,
     /// skipping the intermediate TurnLoopContext conversion.
-    pub(crate) fn as_run_loop_context(
-        &mut self,
-    ) -> crate::agent::runloop::unified::run_loop_context::RunLoopContext<'_> {
+    pub(crate) fn as_run_loop_context(&mut self) -> RunLoopContext<'_> {
         let TurnProcessingContextParts {
             tool: tool_ctx,
             llm: llm_ctx,
@@ -345,7 +343,7 @@ impl<'a> TurnProcessingContext<'a> {
             },
         );
 
-        crate::agent::runloop::unified::run_loop_context::RunLoopContext::new_with_auto_mode_context(
+        let mut ctx = RunLoopContext::new_with_auto_mode_context(
             ui_ctx.renderer,
             ui_ctx.handle,
             tool_ctx.tool_registry,
@@ -363,6 +361,11 @@ impl<'a> TurnProcessingContext<'a> {
             state.harness_state,
             state.harness_emitter,
             auto_mode,
-        )
+        );
+        ctx.active_agent_permissions = llm_ctx
+            .vt_cfg
+            .and_then(|cfg| cfg.runtime_agent_permissions.as_ref())
+            .or(Some(&llm_ctx.active_primary_agent.active().permissions));
+        ctx
     }
 }

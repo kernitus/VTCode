@@ -118,7 +118,7 @@ pub(crate) async fn initialize_session_ui(
             &hooks,
             session_trigger,
             session_id,
-            vt.permissions.default_mode,
+            vtcode_core::config::PermissionMode::Default,
         )?
     } else {
         None

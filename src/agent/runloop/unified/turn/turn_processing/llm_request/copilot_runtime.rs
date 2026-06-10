@@ -9,6 +9,7 @@ use async_trait::async_trait;
 use serde_json::{Value, json};
 use tokio::sync::RwLock;
 use vtcode_config::auth::CopilotAuthConfig;
+use vtcode_config::core::permissions::AgentPermissionsConfig;
 use vtcode_core::acp::{PermissionGrant, ToolPermissionCache};
 use vtcode_core::config::PtyConfig;
 use vtcode_core::copilot::{
@@ -70,7 +71,7 @@ pub(super) struct CopilotRuntimeHost<'a> {
     decision_ledger: &'a Arc<RwLock<vtcode_core::core::decision_tracker::DecisionTracker>>,
     tool_permission_cache: &'a Arc<RwLock<ToolPermissionCache>>,
     permissions_state: &'a Arc<RwLock<vtcode_core::config::PermissionsConfig>>,
-    permission_mode_override: Option<vtcode_config::PermissionMode>,
+    active_agent_permissions: Option<&'a AgentPermissionsConfig>,
     safety_validator: &'a Arc<ToolCallSafetyValidator>,
     lifecycle_hooks: Option<&'a vtcode_core::hooks::LifecycleHookEngine>,
     approval_policy: AskForApproval,
@@ -104,7 +105,7 @@ impl<'a> CopilotRuntimeHost<'a> {
         decision_ledger: &'a Arc<RwLock<vtcode_core::core::decision_tracker::DecisionTracker>>,
         tool_permission_cache: &'a Arc<RwLock<ToolPermissionCache>>,
         permissions_state: &'a Arc<RwLock<vtcode_core::config::PermissionsConfig>>,
-        permission_mode_override: Option<vtcode_config::PermissionMode>,
+        active_agent_permissions: Option<&'a AgentPermissionsConfig>,
         safety_validator: &'a Arc<ToolCallSafetyValidator>,
         lifecycle_hooks: Option<&'a vtcode_core::hooks::LifecycleHookEngine>,
         vt_cfg: Option<&'a vtcode_config::loader::VTCodeConfig>,
@@ -148,7 +149,7 @@ impl<'a> CopilotRuntimeHost<'a> {
             decision_ledger,
             tool_permission_cache,
             permissions_state,
-            permission_mode_override,
+            active_agent_permissions,
             safety_validator,
             lifecycle_hooks,
             approval_policy,
@@ -490,7 +491,7 @@ impl<'a> CopilotRuntimeHost<'a> {
             decision_ledger: Some(self.decision_ledger),
             tool_permission_cache: Some(self.tool_permission_cache),
             permissions_state: Some(self.permissions_state),
-            permission_mode_override: self.permission_mode_override,
+            active_agent_permissions: self.active_agent_permissions,
             hitl_notification_bell: self.hitl_notification_bell,
             approval_policy: self.approval_policy,
             skip_confirmations: self.skip_confirmations,

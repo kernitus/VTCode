@@ -35,7 +35,8 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::{Notify, RwLock};
 use vtcode_config::core::PromptCachingConfig;
-use vtcode_config::{PermissionMode, SubagentSource, SubagentSpec};
+use vtcode_config::core::permissions::{AgentPermissionsConfig, PermissionDefault};
+use vtcode_config::{SubagentSource, SubagentSpec};
 use vtcode_core::acp::{PermissionGrant, ToolPermissionCache};
 use vtcode_core::config::constants::tools as tool_names;
 use vtcode_core::config::types::{
@@ -335,7 +336,7 @@ fn test_primary_agent_spec(name: &str) -> SubagentSpec {
         model: None,
         color: None,
         reasoning_effort: None,
-        permission_mode: Some(PermissionMode::Plan),
+        permissions: AgentPermissionsConfig::new(PermissionDefault::Deny),
         skills: Vec::new(),
         mcp_servers: Vec::new(),
         hooks: None,

@@ -2,7 +2,6 @@ use std::path::Path;
 
 use anyhow::{Context, Result, anyhow};
 use vtcode_core::cli::args::{Cli, Commands};
-use vtcode_core::config::PermissionMode;
 use vtcode_core::config::constants::{defaults, llm_generation};
 use vtcode_core::config::loader::{ConfigManager, VTCodeConfig};
 use vtcode_core::config::models::Provider;
@@ -61,9 +60,7 @@ enum SetupMode {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct StartupModeConfig {
-    permission_mode: PermissionMode,
-}
+struct StartupModeConfig;
 
 fn is_fresh_workspace(workspace: &Path) -> bool {
     let config_path = workspace.join("vtcode.toml");
@@ -290,8 +287,7 @@ fn apply_selection(
     config.agent.default_model = model.to_owned();
     config.agent.small_model.model = lightweight_model.to_owned();
     config.agent.reasoning_effort = reasoning;
-    let startup_mode_config = startup_mode_config(startup_mode);
-    config.permissions.default_mode = startup_mode_config.permission_mode;
+    let _startup_mode_config = startup_mode_config(startup_mode);
     config.features.memories = persistent_memory_enabled;
     config.agent.persistent_memory.enabled = persistent_memory_enabled;
     config.agent.theme = defaults::DEFAULT_THEME.to_owned();
@@ -301,15 +297,7 @@ fn apply_selection(
 
 fn startup_mode_config(mode: StartupMode) -> StartupModeConfig {
     match mode {
-        StartupMode::Edit => StartupModeConfig {
-            permission_mode: PermissionMode::Default,
-        },
-        StartupMode::Auto => StartupModeConfig {
-            permission_mode: PermissionMode::Auto,
-        },
-        StartupMode::Plan => StartupModeConfig {
-            permission_mode: PermissionMode::Plan,
-        },
+        StartupMode::Edit | StartupMode::Auto | StartupMode::Plan => StartupModeConfig,
     }
 }
 
@@ -438,7 +426,7 @@ mod tests {
     }
 
     #[test]
-    fn edit_startup_mode_writes_permission_default() {
+    fn edit_startup_mode_keeps_permissions_config_shape() {
         let mut config = base_config();
 
         apply_selection(
@@ -451,11 +439,11 @@ mod tests {
             false,
         );
 
-        assert_eq!(config.permissions.default_mode, PermissionMode::Default);
+        assert!(config.permissions.allow.is_empty());
     }
 
     #[test]
-    fn auto_startup_mode_writes_auto_permission_mode() {
+    fn auto_startup_mode_keeps_permissions_config_shape() {
         let mut config = base_config();
 
         apply_selection(
@@ -468,11 +456,11 @@ mod tests {
             false,
         );
 
-        assert_eq!(config.permissions.default_mode, PermissionMode::Auto);
+        assert!(config.permissions.allow.is_empty());
     }
 
     #[test]
-    fn plan_startup_mode_writes_plan_permission_mode() {
+    fn plan_startup_mode_keeps_permissions_config_shape() {
         let mut config = base_config();
 
         apply_selection(
@@ -485,7 +473,7 @@ mod tests {
             false,
         );
 
-        assert_eq!(config.permissions.default_mode, PermissionMode::Plan);
+        assert!(config.permissions.allow.is_empty());
     }
 
     #[test]

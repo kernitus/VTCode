@@ -23,7 +23,6 @@ use validation::{
 };
 use vtcode_config::auth::{OpenAIChatGptAuthHandle, resolve_openai_auth};
 use vtcode_core::cli::args::{Cli, Commands};
-use vtcode_core::config::PermissionMode;
 use vtcode_core::config::api_keys::{ApiKeySources, get_api_key};
 use vtcode_core::config::loader::VTCodeConfig;
 use vtcode_core::config::models::{Provider, model_catalog_entry};
@@ -79,19 +78,14 @@ impl StartupContext {
         let mut config = loaded.config;
         apply_codex_experimental_override(&mut config, args.codex_experimental_override());
 
-        // Determine plan mode: CLI flag takes precedence, then config default_mode.
+        // Determine plan mode: CLI flag takes precedence.
         let plan_mode_from_cli = args
             .permission_mode
             .as_ref()
             .is_some_and(|m| m.eq_ignore_ascii_case("plan"));
 
-        let plan_mode_from_config =
-            !plan_mode_from_cli && config.permissions.default_mode == PermissionMode::Plan;
-
         let plan_mode_entry_source = if plan_mode_from_cli {
             PlanModeEntrySource::CliFlag
-        } else if plan_mode_from_config {
-            PlanModeEntrySource::ConfigDefault
         } else {
             PlanModeEntrySource::None
         };

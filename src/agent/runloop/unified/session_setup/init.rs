@@ -186,10 +186,7 @@ pub(crate) async fn initialize_session(
             .await
             .context("Failed to determine workspace trust level for tool policy")?,
     };
-    let autonomous_mode = full_auto
-        || vt_cfg.is_some_and(|cfg| {
-            cfg.permissions.default_mode == vtcode_core::config::PermissionMode::Auto
-        });
+    let autonomous_mode = full_auto;
     apply_workspace_trust_prompt_policy(&mut tool_registry, autonomous_mode, workspace_trust_level)
         .await;
 
@@ -601,7 +598,8 @@ mod tests {
 
     use serde_json::json;
     use vtcode_config::{
-        AgentMode, PermissionMode, SubagentMcpServer, SubagentSource, SubagentSpec,
+        AgentMode, SubagentMcpServer, SubagentSource, SubagentSpec,
+        core::permissions::{AgentPermissionsConfig, PermissionDefault},
     };
 
     use super::*;
@@ -660,7 +658,7 @@ mod tests {
             model: None,
             color: None,
             reasoning_effort: None,
-            permission_mode: Some(PermissionMode::Plan),
+            permissions: AgentPermissionsConfig::new(PermissionDefault::Deny),
             skills: Vec::new(),
             mcp_servers: Vec::new(),
             hooks: None,

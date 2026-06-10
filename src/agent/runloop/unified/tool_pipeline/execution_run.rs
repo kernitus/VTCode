@@ -575,7 +575,9 @@ fn build_tool_permissions_context<'a>(
         decision_ledger: Some(ctx.decision_ledger),
         tool_permission_cache: Some(ctx.tool_permission_cache),
         permissions_state: Some(ctx.permissions_state),
-        permission_mode_override: None,
+        active_agent_permissions: ctx
+            .active_agent_permissions
+            .or_else(|| vt_cfg.and_then(|cfg| cfg.runtime_agent_permissions.as_ref())),
         hitl_notification_bell: vt_cfg
             .map(|cfg| cfg.security.hitl_notification_bell)
             .unwrap_or(true),

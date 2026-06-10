@@ -296,7 +296,9 @@ pub(crate) async fn execute_llm_request(
                         ctx.decision_ledger,
                         ctx.tool_permission_cache,
                         ctx.permissions_state,
-                        turn_snapshot.active_primary_agent.permission_mode,
+                        ctx.vt_cfg
+                            .and_then(|cfg| cfg.runtime_agent_permissions.as_ref())
+                            .or(Some(&turn_snapshot.active_primary_agent.permissions)),
                         ctx.safety_validator,
                         ctx.lifecycle_hooks,
                         ctx.vt_cfg,

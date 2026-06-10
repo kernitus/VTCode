@@ -7,9 +7,10 @@ use crate::acp::AgentClientProtocolConfig;
 use crate::codex::{FileOpener, HistoryConfig, TuiConfig};
 use crate::context::ContextFeaturesConfig;
 use crate::core::{
-    AgentConfig, AnthropicConfig, AuthConfig, AutomationConfig, CommandsConfig,
-    CustomProviderConfig, DotfileProtectionConfig, ModelConfig, OpenAIConfig, PermissionsConfig,
-    PromptCachingConfig, SandboxConfig, SecurityConfig, SkillsConfig, ToolsConfig,
+    AgentConfig, AgentPermissionsConfig, AnthropicConfig, AuthConfig, AutomationConfig,
+    CommandsConfig, CustomProviderConfig, DotfileProtectionConfig, ModelConfig, OpenAIConfig,
+    PermissionsConfig, PromptCachingConfig, SandboxConfig, SecurityConfig, SkillsConfig,
+    ToolsConfig,
 };
 use crate::debug::DebugConfig;
 use crate::defaults::{self, ConfigDefaultsProvider};
@@ -96,6 +97,11 @@ pub struct VTCodeConfig {
     /// Permission system settings (resolution, audit logging, caching)
     #[serde(default)]
     pub permissions: PermissionsConfig,
+
+    /// Runtime-only agent permission policy supplied by derived child agents.
+    #[serde(skip)]
+    #[cfg_attr(feature = "schema", schemars(skip))]
+    pub runtime_agent_permissions: Option<AgentPermissionsConfig>,
 
     /// Security settings
     #[serde(default)]

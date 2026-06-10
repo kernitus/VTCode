@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use serde_json::json;
 use tokio::sync::Notify;
+use vtcode_config::core::permissions::{AgentPermissionsConfig, PermissionDefault};
 use vtcode_core::acp::PermissionGrant;
 use vtcode_core::acp::permission_cache::ToolPermissionCache;
 use vtcode_core::config::constants::tools;
@@ -221,6 +222,81 @@ async fn test_run_tool_call_allows_unlimited_budget_when_disabled() {
                 .to_string()
                 .contains("exceeded max tool calls per turn")
     ));
+}
+
+#[tokio::test]
+async fn test_run_tool_call_forwards_runtime_agent_permissions_to_routing() {
+    let mut test_ctx = TestContext::new().await;
+    let mut registry = test_ctx.registry;
+
+    let permission_cache_arc = Arc::new(tokio::sync::RwLock::new(ToolPermissionCache::new()));
+    let result_cache = Arc::new(tokio::sync::RwLock::new(ToolResultCache::new(10)));
+    let decision_ledger = Arc::new(tokio::sync::RwLock::new(DecisionTracker::new()));
+    let mut session_stats = crate::agent::runloop::unified::state::SessionStats::default();
+    let mut mcp_panel = crate::agent::runloop::mcp_events::McpPanelState::new(10, true);
+    let approval_recorder = test_ctx.approval_recorder;
+    let traj = TrajectoryLogger::new(&test_ctx.workspace);
+    let tools = Arc::new(tokio::sync::RwLock::new(Vec::new()));
+    let agent_permissions = AgentPermissionsConfig::new(PermissionDefault::Deny);
+
+    let mut harness_state = build_harness_state();
+    let mut ctx = crate::agent::runloop::unified::run_loop_context::RunLoopContext::new(
+        &mut test_ctx.renderer,
+        &test_ctx.handle,
+        &mut registry,
+        &tools,
+        &result_cache,
+        &permission_cache_arc,
+        &test_ctx.permissions_state,
+        &decision_ledger,
+        &mut session_stats,
+        &mut mcp_panel,
+        &approval_recorder,
+        &mut test_ctx.session,
+        None,
+        &traj,
+        &mut harness_state,
+        None,
+    );
+    let mut vt_cfg = VTCodeConfig::default();
+    vt_cfg.runtime_agent_permissions = Some(agent_permissions);
+
+    let args = serde_json::to_string(&json!({
+        "action": "write",
+        "path": "notes.md",
+        "content": "hello"
+    }))
+    .expect("serialize unified_file args");
+    let call = vtcode_core::llm::provider::ToolCall::function(
+        "call_active_agent_deny".to_string(),
+        tools::UNIFIED_FILE.to_string(),
+        args,
+    );
+    let ctrl_c_state = Arc::new(CtrlCState::new());
+    let ctrl_c_notify = Arc::new(Notify::new());
+
+    let outcome = run_tool_call(
+        &mut ctx,
+        &call,
+        &ctrl_c_state,
+        &ctrl_c_notify,
+        None,
+        None,
+        true,
+        Some(&vt_cfg),
+        0,
+        false,
+    )
+    .await
+    .expect("run_tool_call must run");
+
+    match outcome.status {
+        ToolExecutionStatus::Failure { error } => {
+            assert!(error.to_string().contains("Tool permission denied"));
+        }
+        other => panic!("Expected permission denial, got: {:?}", other),
+    }
+    assert!(!test_ctx.workspace.join("notes.md").exists());
 }
 
 #[tokio::test]

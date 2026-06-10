@@ -6,6 +6,7 @@ use hashbrown::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
+use vtcode_config::core::permissions::AgentPermissionsConfig;
 use vtcode_core::acp::ToolPermissionCache;
 use vtcode_core::config::PermissionsConfig;
 use vtcode_core::config::loader::VTCodeConfig;
@@ -535,6 +536,7 @@ pub(crate) struct RunLoopContext<'a> {
     pub harness_state: &'a mut HarnessTurnState,
     pub harness_emitter: Option<&'a HarnessEventEmitter>,
     pub auto_mode: Option<AutoModeRuntimeContext<'a>>,
+    pub active_agent_permissions: Option<&'a AgentPermissionsConfig>,
 }
 
 pub(crate) struct AutoModeRuntimeContext<'a> {
@@ -622,6 +624,7 @@ impl<'a> RunLoopContext<'a> {
             harness_state,
             harness_emitter,
             auto_mode,
+            active_agent_permissions: None,
         }
     }
 }

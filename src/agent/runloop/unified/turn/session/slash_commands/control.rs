@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use chrono::Utc;
 
 use vtcode_core::config::PermissionMode;
@@ -87,23 +87,7 @@ pub(crate) fn persist_mode_settings(
     vt_cfg: &mut Option<VTCodeConfig>,
     permission_mode: Option<PermissionMode>,
 ) -> Result<()> {
-    let Some(mode) = permission_mode else {
-        return Ok(());
-    };
-
-    let mut manager = crate::main_helpers::load_workspace_config(workspace)?;
-    let mut config = manager.config().clone();
-
-    config.permissions.default_mode = mode;
-
-    manager
-        .save_config(&config)
-        .context("Failed to persist mode settings")?;
-
-    if let Some(cfg) = vt_cfg.as_mut() {
-        cfg.permissions.default_mode = mode;
-    }
-
+    let _ = (workspace, vt_cfg, permission_mode);
     Ok(())
 }
 
@@ -301,7 +285,7 @@ mod tests {
     use vtcode_core::config::loader::VTCodeConfig;
 
     #[test]
-    fn persist_mode_settings_updates_only_permissions_default_mode() {
+    fn persist_mode_settings_ignores_legacy_permission_mode() {
         let temp = TempDir::new().expect("temp dir");
         let workspace = temp.path();
         let initial = VTCodeConfig::default();
@@ -316,12 +300,15 @@ mod tests {
             .expect("persist mode settings");
 
         let persisted = std::fs::read_to_string(workspace.join("vtcode.toml")).expect("config");
-        assert!(persisted.contains("default_mode = \"auto\""));
         assert!(
             !persisted.contains("default_model ="),
             "mode persistence should not expand agent defaults. Got:\n{}",
             persisted
         );
-        assert!(vt_cfg.is_some_and(|cfg| { cfg.permissions.default_mode == PermissionMode::Auto }));
+        assert_eq!(
+            persisted,
+            toml::to_string(&initial).expect("serialize initial config")
+        );
+        assert!(vt_cfg.is_some());
     }
 }

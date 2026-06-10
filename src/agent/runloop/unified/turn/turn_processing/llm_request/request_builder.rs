@@ -25,7 +25,6 @@ use vtcode_core::subagents::load_primary_memory_appendix;
 use vtcode_core::tools::handlers::anthropic_native_memory_enabled_for_runtime;
 use vtcode_core::{
     ActivePrimaryAgent, apply_primary_agent_prompt_context, apply_primary_agent_tool_policy,
-    clamp_primary_permission_mode,
 };
 
 use super::metrics::{ToolCatalogCacheMetrics, emit_tool_catalog_cache_metrics};
@@ -618,9 +617,6 @@ async fn render_primary_agent_runtime_context(
     agent: &ActivePrimaryAgent,
     reasoning_effort: Option<vtcode_core::config::types::ReasoningEffortLevel>,
 ) -> String {
-    let permissions = ctx.permissions_state.read().await;
-    let effective_permission_mode =
-        clamp_primary_permission_mode(permissions.default_mode, agent.permission_mode);
     let mut lines = Vec::new();
     lines.push("## Active Primary Agent Runtime State".to_string());
     lines.push(format!("- Active agent: {}", agent.display_name));
@@ -646,22 +642,13 @@ async fn render_primary_agent_runtime_context(
         lines.push(format!("- Agent reasoning effort: {raw_effort}"));
     }
     lines.push(format!(
-        "- Session mode: plan_mode={}, auto_mode={}, full_auto={}, permission_mode={}",
-        turn_snapshot.plan_mode,
-        turn_snapshot.auto_mode,
-        turn_snapshot.full_auto,
-        permission_mode_label(effective_permission_mode)
+        "- Session state: plan_mode={}, auto_mode={}, full_auto={}",
+        turn_snapshot.plan_mode, turn_snapshot.auto_mode, turn_snapshot.full_auto
     ));
-    if let Some(mode) = agent.permission_mode {
-        lines.push(format!(
-            "- Agent permission mode: {}",
-            permission_mode_label(mode)
-        ));
-        lines.push(format!(
-            "- Effective permission mode: {}",
-            permission_mode_label(effective_permission_mode)
-        ));
-    }
+    lines.push(format!(
+        "- Active primary permission default: {}",
+        permission_default_label(agent.permissions.default)
+    ));
     lines.push(format!(
         "- Effective request tools: {}",
         render_tool_names(tool_snapshot)
@@ -755,14 +742,14 @@ fn render_tool_names(tool_snapshot: &SessionToolCatalogSnapshot) -> String {
         .join(", ")
 }
 
-fn permission_mode_label(mode: vtcode_config::PermissionMode) -> &'static str {
-    match mode {
-        vtcode_config::PermissionMode::Default => "default",
-        vtcode_config::PermissionMode::AcceptEdits => "accept_edits",
-        vtcode_config::PermissionMode::Auto => "auto",
-        vtcode_config::PermissionMode::Plan => "plan",
-        vtcode_config::PermissionMode::DontAsk => "dont_ask",
-        vtcode_config::PermissionMode::BypassPermissions => "bypass_permissions",
+fn permission_default_label(
+    default: vtcode_config::core::permissions::PermissionDefault,
+) -> &'static str {
+    match default {
+        vtcode_config::core::permissions::PermissionDefault::Ask => "ask",
+        vtcode_config::core::permissions::PermissionDefault::Allow => "allow",
+        vtcode_config::core::permissions::PermissionDefault::Auto => "auto",
+        vtcode_config::core::permissions::PermissionDefault::Deny => "deny",
     }
 }
 
@@ -911,7 +898,8 @@ mod tests {
     use std::sync::Arc;
 
     use serde_json::json;
-    use vtcode_config::{PermissionMode, SubagentMemoryScope, SubagentSource, SubagentSpec};
+    use vtcode_config::core::permissions::{AgentPermissionsConfig, PermissionDefault};
+    use vtcode_config::{SubagentMemoryScope, SubagentSource, SubagentSpec};
     use vtcode_core::config::loader::VTCodeConfig;
     use vtcode_core::config::types::ReasoningEffortLevel;
     use vtcode_core::core::agent::harness_kernel::SessionToolCatalogSnapshot;
@@ -937,7 +925,7 @@ mod tests {
             model: None,
             color: None,
             reasoning_effort: None,
-            permission_mode: Some(PermissionMode::Plan),
+            permissions: AgentPermissionsConfig::new(PermissionDefault::Deny),
             skills: Vec::new(),
             mcp_servers: Vec::new(),
             hooks: None,
