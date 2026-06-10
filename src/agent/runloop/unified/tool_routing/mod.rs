@@ -435,6 +435,12 @@ fn should_allow_without_prompt(
             && auto_permission_safe_builtin_allow(workspace_root, permission_request))
 }
 
+fn full_auto_unavailable_reason(tool_name: &str) -> String {
+    format!(
+        "Auto permission review is unavailable for `{tool_name}` while full-auto permission review is active."
+    )
+}
+
 async fn reuse_saved_approval(
     tool_registry: &ToolRegistry,
     tool_name: &str,
@@ -723,15 +729,21 @@ async fn resolve_auto_permission(
     permissions: &PermissionsConfig,
     auto_permission_runtime: Option<AutoPermissionRuntimeContext<'_>>,
     session_stats: Option<&mut SessionStats>,
+    allow_prompt_fallback: bool,
 ) -> Result<AutoPermissionPermissionOutcome> {
     let Some(stats) = session_stats else {
         tracing::warn!(tool = %tool_name, "auto permission review reviewer missing session stats");
+        if !allow_prompt_fallback {
+            return Ok(AutoPermissionPermissionOutcome::AbortHeadless {
+                reason: full_auto_unavailable_reason(tool_name),
+            });
+        }
         return Ok(AutoPermissionPermissionOutcome::PromptFallback);
     };
 
     if stats.auto_permission_prompt_fallback_active() {
         tracing::trace!(tool = %tool_name, "auto permission review prompt fallback active");
-        if !renderer.supports_inline_ui() {
+        if !allow_prompt_fallback || !renderer.supports_inline_ui() {
             return Ok(AutoPermissionPermissionOutcome::AbortHeadless {
                 reason: headless_auto_permission_fallback_reason(
                     tool_name,
@@ -744,6 +756,11 @@ async fn resolve_auto_permission(
 
     let Some(auto_permission_runtime) = auto_permission_runtime else {
         tracing::warn!(tool = %tool_name, "auto permission review reviewer missing runtime context");
+        if !allow_prompt_fallback {
+            return Ok(AutoPermissionPermissionOutcome::AbortHeadless {
+                reason: full_auto_unavailable_reason(tool_name),
+            });
+        }
         return Ok(AutoPermissionPermissionOutcome::PromptFallback);
     };
 
@@ -801,6 +818,11 @@ async fn resolve_auto_permission(
         }
         Err(err) => {
             tracing::warn!(tool = %tool_name, error = %err, "auto permission review reviewer failed");
+            if !allow_prompt_fallback {
+                return Ok(AutoPermissionPermissionOutcome::AbortHeadless {
+                    reason: full_auto_unavailable_reason(tool_name),
+                });
+            }
             Ok(AutoPermissionPermissionOutcome::PromptFallback)
         }
     }
@@ -980,6 +1002,11 @@ pub(crate) async fn ensure_tool_permission_with_call_id<S: UiSession + ?Sized>(
         })
         .unwrap_or_else(|| tool_name.to_string());
 
+    let policy_decision = tool_registry.evaluate_tool_policy(tool_name).await?;
+    if policy_decision == ToolPermissionDecision::Deny {
+        return Ok(ToolPermissionFlow::Denied);
+    }
+
     let current_dir =
         std::env::current_dir().unwrap_or_else(|_| tool_registry.workspace_root().clone());
     let permissions_snapshot = if let Some(state) = permissions_state {
@@ -1004,17 +1031,26 @@ pub(crate) async fn ensure_tool_permission_with_call_id<S: UiSession + ?Sized>(
     if permission_decision == ResolvedPermissionDecision::Deny {
         return Ok(ToolPermissionFlow::Denied);
     }
-    let requires_protected_write_prompt = permission_request.requires_protected_write_prompt();
-    let requires_rule_prompt = hook_requires_prompt
-        || permission_decision == ResolvedPermissionDecision::Ask
-        || requires_protected_write_prompt;
-    let auto_permission_classifier_review = permission_decision == ResolvedPermissionDecision::Auto
-        && !requires_rule_prompt
-        && !auto_permission_safe_builtin_allow(tool_registry.workspace_root(), &permission_request);
-    let policy_decision = tool_registry.evaluate_tool_policy(tool_name).await?;
-    if policy_decision == ToolPermissionDecision::Deny {
+
+    let full_auto_allowlist_active = tool_registry.current_full_auto_allowlist().await.is_some();
+    if full_auto_allowlist_active
+        && !tool_registry
+            .is_allowed_in_full_auto(&normalized_tool_name)
+            .await
+    {
         return Ok(ToolPermissionFlow::Denied);
     }
+
+    let effective_permission_decision =
+        if full_auto_allowlist_active && permission_decision == ResolvedPermissionDecision::Ask {
+            ResolvedPermissionDecision::Auto
+        } else {
+            permission_decision
+        };
+    let requires_protected_write_prompt = permission_request.requires_protected_write_prompt();
+    let raw_requires_rule_prompt = hook_requires_prompt
+        || permission_decision == ResolvedPermissionDecision::Ask
+        || requires_protected_write_prompt;
 
     let persisted_shell_approval =
         persisted_shell_approval(tool_registry, &normalized_tool_name, tool_args).await;
@@ -1050,9 +1086,22 @@ pub(crate) async fn ensure_tool_permission_with_call_id<S: UiSession + ?Sized>(
         &display_labels.learning_label,
     );
 
-    let requires_sandbox_prompt =
-        shell_approval_reason.is_some() && !auto_permission_classifier_review;
-    let can_reuse_saved_approval = !requires_rule_prompt && !auto_permission_classifier_review;
+    let raw_requires_sandbox_prompt = shell_approval_reason.is_some();
+    let policy_requires_prompt = policy_decision == ToolPermissionDecision::Prompt;
+    let full_auto_promptable = full_auto_allowlist_active
+        && (raw_requires_rule_prompt || raw_requires_sandbox_prompt || policy_requires_prompt);
+    let requires_rule_prompt = raw_requires_rule_prompt && !full_auto_allowlist_active;
+    let auto_permission_classifier_review = (effective_permission_decision
+        == ResolvedPermissionDecision::Auto
+        && !auto_permission_safe_builtin_allow(
+            tool_registry.workspace_root(),
+            &permission_request,
+        ))
+        || full_auto_promptable;
+    let requires_sandbox_prompt = raw_requires_sandbox_prompt && !auto_permission_classifier_review;
+    let can_reuse_saved_approval = !raw_requires_rule_prompt
+        && !auto_permission_classifier_review
+        && !full_auto_allowlist_active;
 
     if can_reuse_saved_approval
         && let Some(flow) = reuse_saved_approval(
@@ -1073,7 +1122,7 @@ pub(crate) async fn ensure_tool_permission_with_call_id<S: UiSession + ?Sized>(
     if should_allow_without_prompt(
         tool_registry.workspace_root(),
         &permission_request,
-        permission_decision,
+        effective_permission_decision,
         requires_rule_prompt,
         requires_sandbox_prompt,
     ) {
@@ -1084,11 +1133,8 @@ pub(crate) async fn ensure_tool_permission_with_call_id<S: UiSession + ?Sized>(
         && !requires_rule_prompt
         && !requires_sandbox_prompt
         && !auto_permission_classifier_review
+        && !full_auto_allowlist_active
     {
-        return Ok(approve_tool_permission_no_cache(tool_registry, tool_name).await);
-    }
-
-    if skip_confirmations {
         return Ok(approve_tool_permission_no_cache(tool_registry, tool_name).await);
     }
 
@@ -1103,6 +1149,7 @@ pub(crate) async fn ensure_tool_permission_with_call_id<S: UiSession + ?Sized>(
             &permissions_snapshot,
             auto_permission_runtime,
             session_stats,
+            !full_auto_allowlist_active,
         )
         .await?
         {
@@ -1117,6 +1164,10 @@ pub(crate) async fn ensure_tool_permission_with_call_id<S: UiSession + ?Sized>(
                 return Ok(ToolPermissionFlow::Blocked { reason });
             }
         }
+    }
+
+    if skip_confirmations && !full_auto_allowlist_active {
+        return Ok(approve_tool_permission_no_cache(tool_registry, tool_name).await);
     }
 
     let should_prompt = requires_rule_prompt

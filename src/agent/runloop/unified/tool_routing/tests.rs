@@ -140,6 +140,30 @@ impl uni::LLMProvider for StaticProvider {
     }
 }
 
+struct ErrorProvider;
+
+#[async_trait]
+impl uni::LLMProvider for ErrorProvider {
+    fn name(&self) -> &str {
+        "test"
+    }
+
+    async fn generate(&self, _request: uni::LLMRequest) -> Result<uni::LLMResponse, uni::LLMError> {
+        Err(uni::LLMError::Provider {
+            message: "reviewer unavailable".to_string(),
+            metadata: None,
+        })
+    }
+
+    fn supported_models(&self) -> Vec<String> {
+        vec!["test-model".to_string()]
+    }
+
+    fn validate_request(&self, _request: &uni::LLMRequest) -> Result<(), uni::LLMError> {
+        Ok(())
+    }
+}
+
 #[test]
 fn reject_policy_blocks_sandbox_prompts() {
     assert!(approval_policy_rejects_prompt(
@@ -1261,6 +1285,331 @@ async fn matching_deny_rule_denies_without_classifier_review() {
         provider.responses.lock().expect("responses lock").len(),
         1,
         "deny rule should not consume the classifier response"
+    );
+}
+
+#[tokio::test]
+async fn full_auto_active_agent_ask_routes_to_auto_review_without_prompt() {
+    let temp_dir = tempfile::TempDir::new().expect("temp dir");
+    let registry = ToolRegistry::new(temp_dir.path().to_path_buf()).await;
+    registry
+        .enable_full_auto_permission(&[tools::UNIFIED_EXEC.to_string()])
+        .await;
+    let mut session = create_headless_session();
+    let handle = session.clone_inline_handle();
+    let mut renderer = AnsiRenderer::with_inline_ui(handle.clone(), Default::default());
+    let ctrl_c_state = Arc::new(crate::agent::runloop::unified::state::CtrlCState::new());
+    let ctrl_c_notify = Arc::new(Notify::new());
+    let permissions = PermissionsConfig::default();
+    let agent_permissions = AgentPermissionsConfig::new(PermissionDefault::Ask);
+    let mut provider = StaticProvider {
+        responses: std::sync::Mutex::new(vec!["ALLOW".to_string()]),
+    };
+    let config = runtime_config();
+    let history = vec![uni::Message::user("run the command".to_string())];
+    let mut session_stats = SessionStats::default();
+
+    let flow = ensure_tool_permission(
+        ToolPermissionsContext {
+            tool_registry: &registry,
+            renderer: &mut renderer,
+            handle: &handle,
+            session: &mut session,
+            default_placeholder: None,
+            ctrl_c_state: &ctrl_c_state,
+            ctrl_c_notify: &ctrl_c_notify,
+            hooks: None,
+            justification: None,
+            approval_recorder: None,
+            decision_ledger: None,
+            tool_permission_cache: None,
+            permissions_state: None,
+            active_agent_permissions: Some(&agent_permissions),
+            hitl_notification_bell: false,
+            approval_policy: reject_all_approvals(),
+            skip_confirmations: false,
+            permissions_config: Some(&permissions),
+            auto_permission_runtime: Some(AutoPermissionRuntimeContext {
+                config: &config,
+                vt_cfg: None,
+                provider_client: &mut provider,
+                working_history: &history,
+            }),
+            active_thread_label: None,
+            session_stats: Some(&mut session_stats),
+        },
+        tools::UNIFIED_EXEC,
+        Some(&json!({"action": "run", "command": "echo hi"})),
+    )
+    .await
+    .expect("permission flow");
+
+    assert_eq!(flow, ToolPermissionFlow::Approved { updated_args: None });
+    assert_eq!(
+        provider.responses.lock().expect("responses lock").len(),
+        0,
+        "active-agent Ask should be reviewed automatically in full-auto"
+    );
+}
+
+#[tokio::test]
+async fn full_auto_reviewer_error_blocks_without_prompt_fallback() {
+    let temp_dir = tempfile::TempDir::new().expect("temp dir");
+    let registry = ToolRegistry::new(temp_dir.path().to_path_buf()).await;
+    registry
+        .enable_full_auto_permission(&[tools::UNIFIED_EXEC.to_string()])
+        .await;
+    let mut session = create_headless_session();
+    let handle = session.clone_inline_handle();
+    let mut renderer = AnsiRenderer::with_inline_ui(handle.clone(), Default::default());
+    let ctrl_c_state = Arc::new(crate::agent::runloop::unified::state::CtrlCState::new());
+    let ctrl_c_notify = Arc::new(Notify::new());
+    let permissions = PermissionsConfig::default();
+    let agent_permissions = AgentPermissionsConfig::new(PermissionDefault::Ask);
+    let mut provider = ErrorProvider;
+    let config = runtime_config();
+    let history = vec![uni::Message::user("run the command".to_string())];
+    let mut session_stats = SessionStats::default();
+
+    let flow = ensure_tool_permission(
+        ToolPermissionsContext {
+            tool_registry: &registry,
+            renderer: &mut renderer,
+            handle: &handle,
+            session: &mut session,
+            default_placeholder: None,
+            ctrl_c_state: &ctrl_c_state,
+            ctrl_c_notify: &ctrl_c_notify,
+            hooks: None,
+            justification: None,
+            approval_recorder: None,
+            decision_ledger: None,
+            tool_permission_cache: None,
+            permissions_state: None,
+            active_agent_permissions: Some(&agent_permissions),
+            hitl_notification_bell: false,
+            approval_policy: reject_all_approvals(),
+            skip_confirmations: false,
+            permissions_config: Some(&permissions),
+            auto_permission_runtime: Some(AutoPermissionRuntimeContext {
+                config: &config,
+                vt_cfg: None,
+                provider_client: &mut provider,
+                working_history: &history,
+            }),
+            active_thread_label: None,
+            session_stats: Some(&mut session_stats),
+        },
+        tools::UNIFIED_EXEC,
+        Some(&json!({"action": "run", "command": "echo hi"})),
+    )
+    .await
+    .expect("permission flow");
+
+    match flow {
+        ToolPermissionFlow::Blocked { reason } => {
+            assert!(reason.contains("full-auto permission review is active"));
+        }
+        other => panic!("expected blocked flow, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn full_auto_allowlist_does_not_bypass_tool_policy_deny() {
+    let temp_dir = tempfile::TempDir::new().expect("temp dir");
+    let registry = ToolRegistry::new(temp_dir.path().to_path_buf()).await;
+    registry
+        .enable_full_auto_permission(&[tools::UNIFIED_EXEC.to_string()])
+        .await;
+    registry
+        .set_tool_policy(tools::UNIFIED_EXEC, ToolPolicy::Deny)
+        .await
+        .expect("persist deny policy");
+    let mut session = create_headless_session();
+    let handle = session.clone_inline_handle();
+    let mut renderer = AnsiRenderer::with_inline_ui(handle.clone(), Default::default());
+    let ctrl_c_state = Arc::new(crate::agent::runloop::unified::state::CtrlCState::new());
+    let ctrl_c_notify = Arc::new(Notify::new());
+    let permissions = PermissionsConfig::default();
+    let agent_permissions = AgentPermissionsConfig::new(PermissionDefault::Ask);
+    let mut provider = StaticProvider {
+        responses: std::sync::Mutex::new(vec!["ALLOW".to_string()]),
+    };
+    let config = runtime_config();
+    let history = vec![uni::Message::user("run the command".to_string())];
+    let mut session_stats = SessionStats::default();
+
+    let flow = ensure_tool_permission(
+        ToolPermissionsContext {
+            tool_registry: &registry,
+            renderer: &mut renderer,
+            handle: &handle,
+            session: &mut session,
+            default_placeholder: None,
+            ctrl_c_state: &ctrl_c_state,
+            ctrl_c_notify: &ctrl_c_notify,
+            hooks: None,
+            justification: None,
+            approval_recorder: None,
+            decision_ledger: None,
+            tool_permission_cache: None,
+            permissions_state: None,
+            active_agent_permissions: Some(&agent_permissions),
+            hitl_notification_bell: false,
+            approval_policy: AskForApproval::OnRequest,
+            skip_confirmations: false,
+            permissions_config: Some(&permissions),
+            auto_permission_runtime: Some(AutoPermissionRuntimeContext {
+                config: &config,
+                vt_cfg: None,
+                provider_client: &mut provider,
+                working_history: &history,
+            }),
+            active_thread_label: None,
+            session_stats: Some(&mut session_stats),
+        },
+        tools::UNIFIED_EXEC,
+        Some(&json!({"action": "run", "command": "echo hi"})),
+    )
+    .await
+    .expect("permission flow");
+
+    assert_eq!(flow, ToolPermissionFlow::Denied);
+    assert_eq!(
+        provider.responses.lock().expect("responses lock").len(),
+        1,
+        "tool-policy denials should not consume classifier responses"
+    );
+}
+
+#[tokio::test]
+async fn full_auto_allowlist_does_not_bypass_explicit_deny_rule() {
+    let temp_dir = tempfile::TempDir::new().expect("temp dir");
+    let registry = ToolRegistry::new(temp_dir.path().to_path_buf()).await;
+    registry
+        .enable_full_auto_permission(&[tools::UNIFIED_EXEC.to_string()])
+        .await;
+    let mut session = create_headless_session();
+    let handle = session.clone_inline_handle();
+    let mut renderer = AnsiRenderer::with_inline_ui(handle.clone(), Default::default());
+    let ctrl_c_state = Arc::new(crate::agent::runloop::unified::state::CtrlCState::new());
+    let ctrl_c_notify = Arc::new(Notify::new());
+    let permissions = PermissionsConfig {
+        deny: vec![tools::UNIFIED_EXEC.to_string()],
+        ..PermissionsConfig::default()
+    };
+    let agent_permissions = AgentPermissionsConfig::new(PermissionDefault::Ask);
+    let mut provider = StaticProvider {
+        responses: std::sync::Mutex::new(vec!["ALLOW".to_string()]),
+    };
+    let config = runtime_config();
+    let history = vec![uni::Message::user("run the command".to_string())];
+    let mut session_stats = SessionStats::default();
+
+    let flow = ensure_tool_permission(
+        ToolPermissionsContext {
+            tool_registry: &registry,
+            renderer: &mut renderer,
+            handle: &handle,
+            session: &mut session,
+            default_placeholder: None,
+            ctrl_c_state: &ctrl_c_state,
+            ctrl_c_notify: &ctrl_c_notify,
+            hooks: None,
+            justification: None,
+            approval_recorder: None,
+            decision_ledger: None,
+            tool_permission_cache: None,
+            permissions_state: None,
+            active_agent_permissions: Some(&agent_permissions),
+            hitl_notification_bell: false,
+            approval_policy: AskForApproval::OnRequest,
+            skip_confirmations: false,
+            permissions_config: Some(&permissions),
+            auto_permission_runtime: Some(AutoPermissionRuntimeContext {
+                config: &config,
+                vt_cfg: None,
+                provider_client: &mut provider,
+                working_history: &history,
+            }),
+            active_thread_label: None,
+            session_stats: Some(&mut session_stats),
+        },
+        tools::UNIFIED_EXEC,
+        Some(&json!({"action": "run", "command": "echo hi"})),
+    )
+    .await
+    .expect("permission flow");
+
+    assert_eq!(flow, ToolPermissionFlow::Denied);
+    assert_eq!(
+        provider.responses.lock().expect("responses lock").len(),
+        1,
+        "explicit permission denials should not consume classifier responses"
+    );
+}
+
+#[tokio::test]
+async fn full_auto_allowlist_denies_outside_tools_before_auto_review() {
+    let temp_dir = tempfile::TempDir::new().expect("temp dir");
+    let registry = ToolRegistry::new(temp_dir.path().to_path_buf()).await;
+    registry
+        .enable_full_auto_permission(&[tools::READ_FILE.to_string()])
+        .await;
+    let mut session = create_headless_session();
+    let handle = session.clone_inline_handle();
+    let mut renderer = AnsiRenderer::with_inline_ui(handle.clone(), Default::default());
+    let ctrl_c_state = Arc::new(crate::agent::runloop::unified::state::CtrlCState::new());
+    let ctrl_c_notify = Arc::new(Notify::new());
+    let permissions = PermissionsConfig::default();
+    let agent_permissions = AgentPermissionsConfig::new(PermissionDefault::Auto);
+    let mut provider = StaticProvider {
+        responses: std::sync::Mutex::new(vec!["ALLOW".to_string()]),
+    };
+    let config = runtime_config();
+    let history = vec![uni::Message::user("run the command".to_string())];
+    let mut session_stats = SessionStats::default();
+
+    let flow = ensure_tool_permission(
+        ToolPermissionsContext {
+            tool_registry: &registry,
+            renderer: &mut renderer,
+            handle: &handle,
+            session: &mut session,
+            default_placeholder: None,
+            ctrl_c_state: &ctrl_c_state,
+            ctrl_c_notify: &ctrl_c_notify,
+            hooks: None,
+            justification: None,
+            approval_recorder: None,
+            decision_ledger: None,
+            tool_permission_cache: None,
+            permissions_state: None,
+            active_agent_permissions: Some(&agent_permissions),
+            hitl_notification_bell: false,
+            approval_policy: AskForApproval::OnRequest,
+            skip_confirmations: false,
+            permissions_config: Some(&permissions),
+            auto_permission_runtime: Some(AutoPermissionRuntimeContext {
+                config: &config,
+                vt_cfg: None,
+                provider_client: &mut provider,
+                working_history: &history,
+            }),
+            active_thread_label: None,
+            session_stats: Some(&mut session_stats),
+        },
+        tools::UNIFIED_EXEC,
+        Some(&json!({"action": "run", "command": "echo hi"})),
+    )
+    .await
+    .expect("permission flow");
+
+    assert_eq!(flow, ToolPermissionFlow::Denied);
+    assert_eq!(
+        provider.responses.lock().expect("responses lock").len(),
+        1,
+        "full-auto allow-list denials should not consume classifier responses"
     );
 }
 
