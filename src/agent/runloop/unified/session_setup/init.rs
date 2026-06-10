@@ -306,7 +306,7 @@ pub(crate) async fn initialize_session(
     )
     .await;
     let active_primary_agent = if let Some(controller) = subagent_controller.as_ref() {
-        active_primary_agent_from_specs(
+        active_primary_agent_from_specs_for_mode(
             &controller.effective_specs().await,
             vt_cfg,
             full_auto,
@@ -322,7 +322,7 @@ pub(crate) async fn initialize_session(
                 config.workspace.display()
             )
         })?;
-        active_primary_agent_from_specs(
+        active_primary_agent_from_specs_for_mode(
             &discovered.effective,
             vt_cfg,
             full_auto,
@@ -422,6 +422,7 @@ pub(crate) async fn initialize_session(
     })
 }
 
+#[cfg(test)]
 fn active_primary_agent_from_specs(
     specs: &[vtcode_config::SubagentSpec],
     vt_cfg: Option<&VTCodeConfig>,

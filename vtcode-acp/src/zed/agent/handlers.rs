@@ -1,8 +1,7 @@
 use super::super::constants::*;
 use super::super::helpers::{
     SESSION_CONFIG_MODEL_ID, SESSION_CONFIG_PRIMARY_AGENT_ID, SESSION_CONFIG_PROVIDER_ID,
-    SESSION_CONFIG_THOUGHT_LEVEL_ID, agent_implementation_info, normalise_primary_agent_id,
-    text_chunk,
+    SESSION_CONFIG_THOUGHT_LEVEL_ID, agent_implementation_info, text_chunk,
 };
 use super::super::types::{PlanProgress, ToolRuntime};
 use super::ZedAgent;
@@ -520,7 +519,8 @@ impl acp::Agent for ZedAgent {
 
         match args.config_id.0.as_ref() {
             SESSION_CONFIG_PRIMARY_AGENT_ID => {
-                let Some(primary_agent) = normalise_primary_agent_id(args.value.0.as_ref()) else {
+                let Some(primary_agent) = self.primary_agents.resolve_id(args.value.0.as_ref())
+                else {
                     return Err(acp::Error::invalid_params().data(json!({
                         "reason": "unknown_primary_agent",
                         "value": args.value.0,

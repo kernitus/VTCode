@@ -43,8 +43,8 @@ mod tests {
         TOOL_LIST_FILES_ITEMS_KEY, TOOL_LIST_FILES_RESULT_KEY, TOOL_LIST_FILES_URI_ARG,
     };
     use crate::zed::helpers::{
-        SESSION_CONFIG_MODEL_ID, SESSION_CONFIG_PRIMARY_AGENT_ID, SESSION_CONFIG_PROVIDER_ID,
-        SESSION_CONFIG_THOUGHT_LEVEL_ID,
+        PrimaryAgentCatalog, SESSION_CONFIG_MODEL_ID, SESSION_CONFIG_PRIMARY_AGENT_ID,
+        SESSION_CONFIG_PROVIDER_ID, SESSION_CONFIG_THOUGHT_LEVEL_ID,
     };
     use crate::zed::types::NotificationEnvelope;
     use agent_client_protocol::{
@@ -57,6 +57,7 @@ mod tests {
     use std::path::Path;
     use tokio::fs;
     use tokio::sync::mpsc;
+    use vtcode_config::{SubagentDiscoveryInput, discover_subagents};
     use vtcode_core::config::core::PromptCachingConfig;
     use vtcode_core::config::models::{ModelId, Provider};
     use vtcode_core::config::types::{
@@ -104,6 +105,11 @@ mod tests {
                 let _ = envelope.completion.send(());
             }
         });
+        let mut discovery_input = SubagentDiscoveryInput::new(workspace.to_path_buf());
+        discovery_input.include_user_agents = false;
+        let discovered = discover_subagents(&discovery_input).expect("discover primary agents");
+        let primary_agents =
+            PrimaryAgentCatalog::from_specs_with_default(&discovered.effective, "duck");
 
         ZedAgent::new(
             core_config,
@@ -113,7 +119,7 @@ mod tests {
             String::new(),
             tx,
             Some("Zed".to_string()),
-            "duck".to_string(),
+            primary_agents,
         )
         .await
     }
@@ -143,6 +149,27 @@ mod tests {
                         .iter()
                         .map(|option| option.value.0.as_ref().to_string())
                         .collect(),
+                    _ => Vec::new(),
+                }),
+                _ => None,
+            })
+            .unwrap_or_default()
+    }
+
+    fn primary_agent_select_labels(
+        config_options: &[crate::acp::SessionConfigOption],
+    ) -> Vec<String> {
+        config_options
+            .iter()
+            .find_map(|option| {
+                (option.id == crate::acp::SessionConfigId::new(SESSION_CONFIG_PRIMARY_AGENT_ID))
+                    .then_some(&option.kind)
+            })
+            .and_then(|kind| match kind {
+                SessionConfigKind::Select(select) => Some(match &select.options {
+                    SessionConfigSelectOptions::Ungrouped(options) => {
+                        options.iter().map(|option| option.name.clone()).collect()
+                    }
                     _ => Vec::new(),
                 }),
                 _ => None,
@@ -400,13 +427,32 @@ mod tests {
             ))
             .await;
 
-        assert!(result.is_err());
+        let error = result.expect_err("unknown primary agent should be rejected");
+        let error = format!("{error:?}");
+        assert!(error.contains("unknown_primary_agent"));
+        assert!(error.contains("research"));
         assert_eq!(session.data.borrow().primary_agent, "build");
     }
 
     #[tokio::test]
-    async fn session_config_options_do_not_include_unknown_primary_agent() {
+    async fn session_config_options_include_custom_primary_agent() {
         let temp = TempDir::new().unwrap();
+        fs::create_dir_all(temp.path().join(".vtcode/agents"))
+            .await
+            .unwrap();
+        fs::write(
+            temp.path().join(".vtcode/agents/research.md"),
+            r#"---
+name: research
+description: Research primary
+mode: primary
+permissions:
+  default: deny
+---
+Research primary prompt."#,
+        )
+        .await
+        .unwrap();
         let agent = build_agent(temp.path()).await;
         let session_id = agent.register_session();
         let session = agent.session_handle(&session_id).unwrap();
@@ -420,13 +466,54 @@ mod tests {
 
         assert_eq!(
             primary_agent_select_values(&config_options),
-            ["duck", "plan", "build", "auto", "review"]
+            ["duck", "plan", "build", "auto", "review", "research"]
                 .map(str::to_string)
                 .to_vec()
         );
+        assert!(primary_agent_select_labels(&config_options).contains(&"Research primary".into()));
         assert_eq!(
             primary_agent_current_value(&config_options),
-            Some("duck".to_string())
+            Some("research".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn session_config_options_use_overridden_builtin_primary_agent_metadata() {
+        let temp = TempDir::new().unwrap();
+        fs::create_dir_all(temp.path().join(".vtcode/agents"))
+            .await
+            .unwrap();
+        fs::write(
+            temp.path().join(".vtcode/agents/build.md"),
+            r#"---
+name: build
+description: Project Build
+mode: primary
+permissions:
+  default: deny
+aliases:
+  - project-builder
+---
+Project build prompt."#,
+        )
+        .await
+        .unwrap();
+        let agent = build_agent(temp.path()).await;
+        let session_id = agent.register_session();
+        let session = agent.session_handle(&session_id).unwrap();
+
+        let response = agent
+            .set_session_config_option(SetSessionConfigOptionRequest::new(
+                session_id,
+                SESSION_CONFIG_PRIMARY_AGENT_ID,
+                "project-builder",
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(session.data.borrow().primary_agent, "build");
+        assert!(
+            primary_agent_select_labels(&response.config_options).contains(&"Project Build".into())
         );
     }
 

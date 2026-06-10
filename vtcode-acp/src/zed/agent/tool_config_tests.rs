@@ -1,5 +1,6 @@
 use super::ZedAgent;
 use crate::tooling::ToolDescriptor;
+use crate::zed::helpers::PrimaryAgentCatalog;
 use crate::zed::types::{NotificationEnvelope, ToolRuntime};
 use assert_fs::TempDir;
 use serde_json::json;
@@ -8,6 +9,7 @@ use std::fs;
 use std::path::Path;
 use std::time::Duration;
 use tokio::sync::mpsc;
+use vtcode_config::{SubagentDiscoveryInput, discover_subagents};
 use vtcode_core::config::constants::tools;
 use vtcode_core::config::core::PromptCachingConfig;
 use vtcode_core::config::tool_call_delay_for_rate;
@@ -58,6 +60,11 @@ async fn build_agent_with_tools_config(workspace: &Path, tools_config: ToolsConf
             let _ = envelope.completion.send(());
         }
     });
+    let mut discovery_input = SubagentDiscoveryInput::new(workspace.to_path_buf());
+    discovery_input.include_user_agents = false;
+    let discovered = discover_subagents(&discovery_input).expect("discover primary agents");
+    let primary_agents =
+        PrimaryAgentCatalog::from_specs_with_default(&discovered.effective, "duck");
 
     ZedAgent::new(
         core_config,
@@ -67,7 +74,7 @@ async fn build_agent_with_tools_config(workspace: &Path, tools_config: ToolsConf
         String::new(),
         tx,
         Some("Zed".to_string()),
-        "duck".to_string(),
+        primary_agents,
     )
     .await
 }
@@ -273,6 +280,63 @@ async fn read_only_primary_agents_hide_local_tools() {
 }
 
 #[tokio::test]
+async fn custom_primary_agent_permissions_control_local_tools() {
+    let temp = TempDir::new().unwrap();
+    fs::create_dir_all(temp.path().join(".vtcode/agents")).unwrap();
+    fs::write(
+        temp.path().join(".vtcode/agents/sheller.md"),
+        r#"---
+name: sheller
+description: Shell primary
+mode: primary
+permissions:
+  default: deny
+  allow:
+    - unified_exec
+---
+Shell prompt."#,
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join(".vtcode/agents/reader.md"),
+        r#"---
+name: reader
+description: Reader primary
+mode: primary
+permissions:
+  default: deny
+---
+Reader prompt."#,
+    )
+    .unwrap();
+    let agent = build_agent(temp.path()).await;
+    let enabled_tools: Vec<_> = agent
+        .tool_availability(true, false, "test-provider", "test-model")
+        .into_iter()
+        .filter_map(|(tool, runtime)| match runtime {
+            ToolRuntime::Enabled => Some(tool),
+            ToolRuntime::Disabled(_) => None,
+        })
+        .collect();
+
+    let sheller_names = definition_names(
+        agent
+            .tool_definitions(true, &enabled_tools, "sheller")
+            .unwrap(),
+    );
+    let reader_names = definition_names(
+        agent
+            .tool_definitions(true, &enabled_tools, "reader")
+            .unwrap(),
+    );
+
+    assert!(sheller_names.contains(&"unified_exec".to_string()));
+    assert!(sheller_names.contains(&"unified_file".to_string()));
+    assert!(!reader_names.contains(&"unified_exec".to_string()));
+    assert!(!reader_names.contains(&"unified_file".to_string()));
+}
+
+#[tokio::test]
 async fn local_tool_execution_uses_registry_request_path() {
     let temp = TempDir::new().unwrap();
     fs::create_dir(temp.path().join("src")).unwrap();
@@ -391,6 +455,33 @@ async fn local_tool_metadata_uses_core_action_labels_and_kinds() {
 }
 
 #[tokio::test]
+async fn resolved_messages_include_custom_primary_agent_prompt() {
+    let temp = TempDir::new().unwrap();
+    fs::create_dir_all(temp.path().join(".vtcode/agents")).unwrap();
+    fs::write(
+        temp.path().join(".vtcode/agents/research.md"),
+        r#"---
+name: research
+description: Research primary
+mode: primary
+permissions:
+  default: deny
+---
+Research primary prompt."#,
+    )
+    .unwrap();
+    let agent = build_agent(temp.path()).await;
+    let session_id = agent.register_session();
+    let session = agent.session_handle(&session_id).unwrap();
+    assert!(agent.update_session_primary_agent(&session, "research".to_string()));
+
+    let messages = agent.resolved_messages(&session);
+    assert_eq!(messages.len(), 1);
+    assert_eq!(messages[0].role, MessageRole::System);
+    assert_eq!(messages[0].content.as_text(), "Research primary prompt.");
+}
+
+#[tokio::test]
 async fn resolved_messages_include_primary_agent_prompt() {
     let temp = TempDir::new().unwrap();
     let agent = build_agent(temp.path()).await;
@@ -401,7 +492,7 @@ async fn resolved_messages_include_primary_agent_prompt() {
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0].role, MessageRole::System);
     let prompt = messages[0].content.as_text();
-    assert!(prompt.contains("duck primary agent"));
+    assert!(prompt.contains("You are the duck agent"));
     assert!(!prompt.contains("Architect mode"));
     assert!(!prompt.contains("Code mode"));
 }

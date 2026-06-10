@@ -15,10 +15,7 @@ use vtcode_core::llm::provider::{FinishReason, Message};
 use vtcode_core::utils::session_archive::find_session_by_identifier;
 
 use super::super::constants::SESSION_PREFIX;
-use super::super::helpers::{
-    normalise_primary_agent_id, normalise_primary_agent_id_or_default, primary_agent_prompt,
-    session_config_options,
-};
+use super::super::helpers::session_config_options;
 use super::super::types::{SessionData, SessionHandle};
 
 impl ZedAgent {
@@ -90,8 +87,7 @@ impl ZedAgent {
         let reasoning_effort = self.session_reasoning_effort_for_thread(&thread);
         let provider = self.session_provider_for_thread(&thread);
         let model = self.session_model_for_thread(&thread);
-        let primary_agent =
-            normalise_primary_agent_id_or_default(&self.default_primary_agent).to_string();
+        let primary_agent = self.primary_agents.default_id().to_string();
         SessionHandle {
             data: Rc::new(RefCell::new(SessionData {
                 _session_id: session_id,
@@ -150,7 +146,7 @@ impl ZedAgent {
         session: &SessionHandle,
         primary_agent: String,
     ) -> bool {
-        let Some(primary_agent) = normalise_primary_agent_id(&primary_agent) else {
+        let Some(primary_agent) = self.primary_agents.resolve_id(&primary_agent) else {
             return false;
         };
         let mut data = session.data.borrow_mut();
@@ -302,6 +298,7 @@ impl ZedAgent {
         let model_options = self.model_select_options(&data.provider, &data.model);
         let config_options = session_config_options(
             &data.primary_agent,
+            &self.primary_agents,
             data.reasoning_effort,
             self.model_supports_thought_level(&data.provider, &data.model),
             &data.provider,
@@ -328,7 +325,7 @@ impl ZedAgent {
         }
 
         let history = session.data.borrow();
-        if let Some(prompt) = primary_agent_prompt(&history.primary_agent) {
+        if let Some(prompt) = self.primary_agents.prompt(&history.primary_agent) {
             messages.push(Message::system(prompt.to_string()));
         }
         messages.extend(history.thread.messages());
@@ -373,12 +370,15 @@ impl ZedAgent {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::zed::helpers::PrimaryAgentCatalog;
     use crate::zed::types::NotificationEnvelope;
     use assert_fs::TempDir;
     use chrono::Utc;
     use std::collections::BTreeMap;
+    use std::fs;
     use std::path::Path;
     use tokio::sync::mpsc;
+    use vtcode_config::{SubagentDiscoveryInput, discover_subagents};
     use vtcode_core::config::core::PromptCachingConfig;
     use vtcode_core::config::types::{
         AgentConfig as CoreAgentConfig, ModelSelectionSource, UiSurfacePreference,
@@ -428,6 +428,13 @@ mod tests {
                 let _ = envelope.completion.send(());
             }
         });
+        let mut discovery_input = SubagentDiscoveryInput::new(workspace.to_path_buf());
+        discovery_input.include_user_agents = false;
+        let discovered = discover_subagents(&discovery_input).expect("discover primary agents");
+        let primary_agents = PrimaryAgentCatalog::from_specs_with_default(
+            &discovered.effective,
+            default_primary_agent,
+        );
 
         ZedAgent::new(
             core_config,
@@ -437,7 +444,7 @@ mod tests {
             String::new(),
             tx,
             Some("Zed".to_string()),
-            default_primary_agent.to_string(),
+            primary_agents,
         )
         .await
     }
@@ -503,6 +510,30 @@ mod tests {
 
             assert_eq!(session.data.borrow().primary_agent, primary_agent);
         }
+    }
+
+    #[tokio::test]
+    async fn register_session_uses_custom_default_primary_agent() {
+        let temp = TempDir::new().unwrap();
+        fs::create_dir_all(temp.path().join(".vtcode/agents")).unwrap();
+        fs::write(
+            temp.path().join(".vtcode/agents/research.md"),
+            r#"---
+name: research
+description: Research primary
+mode: primary
+permissions:
+  default: deny
+---
+Research primary prompt."#,
+        )
+        .unwrap();
+
+        let agent = build_agent_with_default_primary_agent(temp.path(), "research").await;
+        let session_id = agent.register_session();
+        let session = agent.session_handle(&session_id).unwrap();
+
+        assert_eq!(session.data.borrow().primary_agent, "research");
     }
 
     #[tokio::test]

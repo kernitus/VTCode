@@ -13,12 +13,13 @@ use vtcode_core::tools::command_args;
 use vtcode_core::utils::path::ensure_path_within_workspace;
 
 use super::super::constants::*;
-use super::super::helpers::{primary_agent_allows_local_tools, text_chunk};
+use super::super::helpers::text_chunk;
 use super::super::types::{RunTerminalMode, ToolDisableReason, ToolRuntime};
 
 impl ZedAgent {
     pub(super) fn local_tools_available(&self, primary_agent: &str) -> bool {
-        primary_agent_allows_local_tools(primary_agent) && self.acp_tool_registry.has_local_tools()
+        self.primary_agents.allows_local_tools(primary_agent)
+            && self.acp_tool_registry.has_local_tools()
     }
 
     pub(super) fn tool_definitions(
