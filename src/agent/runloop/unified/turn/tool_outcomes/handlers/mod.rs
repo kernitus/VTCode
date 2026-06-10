@@ -514,7 +514,10 @@ pub(crate) async fn validate_tool_call<'a>(
             } else {
                 ToolExecutionError::policy_violation(
                     canonical_tool_name,
-                    format!("Tool '{}' execution denied by policy", prepared.canonical_name),
+                    format!(
+                        "Tool '{}' execution denied by policy",
+                        prepared.canonical_name
+                    ),
                 )
                 .to_json_value()
             };

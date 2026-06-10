@@ -936,8 +936,7 @@ mod tests {
         ] {
             assert!(
                 !cat.recovery_suggestions().is_empty(),
-                "Missing recovery suggestions for {:?}",
-                cat
+                "Missing recovery suggestions for {cat:?}"
             );
         }
     }

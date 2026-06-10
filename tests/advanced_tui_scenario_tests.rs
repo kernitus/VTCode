@@ -178,7 +178,7 @@ fn test_ui_message_combinations() {
     for (name, messages) in test_cases {
         let message_repr: Vec<String> = messages
             .iter()
-            .map(|(kind, text)| format!("{:?}: {}", kind, text))
+            .map(|(kind, text)| format!("{kind:?}: {text}"))
             .collect();
         assert_snapshot!(
             format!("message_combo_{}", name),

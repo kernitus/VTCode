@@ -40,7 +40,7 @@ fn test_actual_tui_rendering() {
 fn test_ui_component_serialization() {
     // Test InlineTheme serialization
     let theme = InlineTheme::default();
-    let theme_repr = format!("{:?}", theme);
+    let theme_repr = format!("{theme:?}");
     assert_snapshot!("theme_representation", theme_repr);
 
     // Test InlineSegment serialization with different styles
@@ -103,7 +103,7 @@ fn test_header_context_rendering() {
     };
 
     // Test that the context can be properly represented
-    let context_repr = format!("{:?}", context);
+    let context_repr = format!("{context:?}");
     assert_snapshot!("header_context_representation", context_repr);
 }
 
