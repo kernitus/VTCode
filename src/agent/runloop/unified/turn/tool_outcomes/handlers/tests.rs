@@ -36,7 +36,7 @@ use std::time::Instant;
 use tokio::sync::{Notify, RwLock};
 use vtcode_config::core::PromptCachingConfig;
 use vtcode_config::core::permissions::{AgentPermissionsConfig, PermissionDefault};
-use vtcode_config::{SubagentSource, SubagentSpec};
+use vtcode_config::{SubagentSource, SubagentSpec, builtin_primary_build_agent};
 use vtcode_core::acp::{PermissionGrant, ToolPermissionCache};
 use vtcode_core::config::constants::tools as tool_names;
 use vtcode_core::config::types::{
@@ -329,6 +329,12 @@ impl TestContextBacking {
         self.active_primary_agent
             .select_from_specs(specs, requested)
             .expect("test primary agent should resolve");
+    }
+
+    fn select_build_primary_agent(&mut self) {
+        let mut spec = builtin_primary_build_agent();
+        spec.permissions = AgentPermissionsConfig::new(PermissionDefault::Allow);
+        self.select_primary_agent_from_specs(&[spec], "build");
     }
 }
 

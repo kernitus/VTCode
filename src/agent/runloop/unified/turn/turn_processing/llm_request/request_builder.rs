@@ -987,6 +987,10 @@ mod tests {
     #[tokio::test]
     async fn recovery_request_omits_tools_and_disables_tool_choice() {
         let mut backing = TestTurnProcessingBacking::new(4).await;
+        backing.select_primary_agent_from_specs(
+            &[vtcode_config::builtin_primary_build_agent()],
+            "build",
+        );
         backing
             .add_tool_definition(ToolDefinition::function(
                 "unified_search".to_string(),
@@ -1557,6 +1561,10 @@ mod tests {
     #[tokio::test]
     async fn unconstrained_primary_agent_falls_back_to_baseline_tools() {
         let mut backing = TestTurnProcessingBacking::new(4).await;
+        backing.select_primary_agent_from_specs(
+            &[vtcode_config::builtin_primary_build_agent()],
+            "build",
+        );
         backing
             .add_tool_definition(named_tool("unified_search"))
             .await;

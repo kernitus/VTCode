@@ -1212,7 +1212,7 @@ async fn auto_permission_headless_fallback_returns_blocked_summary() {
 
     match flow {
         ToolPermissionFlow::Blocked { reason } => {
-            assert!(reason.contains("non-interactive mode"));
+            assert!(reason.contains("non-interactive runs"));
             assert!(reason.contains("force push is destructive"));
             assert!(reason.contains("Destroy or exfiltrate"));
         }

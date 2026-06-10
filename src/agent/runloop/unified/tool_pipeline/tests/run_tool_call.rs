@@ -934,6 +934,7 @@ async fn test_run_tool_call_allows_escalated_shell_with_saved_prefix_rule() {
 
     let mut vt_cfg = VTCodeConfig::default();
     vt_cfg.security.human_in_the_loop = false;
+    vt_cfg.runtime_agent_permissions = Some(AgentPermissionsConfig::new(PermissionDefault::Allow));
     vt_cfg.commands.approval_prefixes.push(
         "echo hi|sandbox_permissions=\"require_escalated\"|additional_permissions=null".to_string(),
     );
