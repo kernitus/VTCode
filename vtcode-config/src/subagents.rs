@@ -1110,6 +1110,9 @@ fn normalize_subagent_tool_name(tool: &str) -> &'static [&'static str] {
 
 fn is_mutating_tool_name(tool: &str) -> bool {
     tool == "edit"
+        || tool == "bash"
+        || tool == "shell"
+        || tool == "command"
         || tool == "write"
         || tool == tools::UNIFIED_EXEC
         || tool == tools::EDIT_FILE
@@ -1123,6 +1126,28 @@ fn is_mutating_tool_name(tool: &str) -> bool {
         || tool == tools::SEARCH_REPLACE
 }
 
+fn permission_rule_allows_mutation(rule: &str) -> bool {
+    let tool_name = permission_rule_tool_name(rule);
+    let normalized = tool_name.to_ascii_lowercase();
+    if is_mutating_tool_name(normalized.as_str()) {
+        return true;
+    }
+
+    normalize_subagent_tool_name(tool_name)
+        .iter()
+        .any(|tool| is_mutating_tool_name(tool))
+}
+
+fn permission_rule_tool_name(rule: &str) -> &str {
+    let trimmed = rule.trim();
+    if let Some((tool_name, specifier)) = trimmed.split_once('(')
+        && specifier.trim_end().ends_with(')')
+    {
+        return tool_name.trim();
+    }
+    trimmed
+}
+
 fn apply_plugin_restrictions(spec: &mut SubagentSpec) {
     if spec.hooks.take().is_some() {
         spec.warnings
@@ -1132,6 +1157,30 @@ fn apply_plugin_restrictions(spec: &mut SubagentSpec) {
         spec.mcp_servers.clear();
         spec.warnings
             .push("plugin subagent mcp_servers are ignored for safety".to_string());
+    }
+    let default_restricted = matches!(
+        spec.permissions.default,
+        PermissionDefault::Allow | PermissionDefault::Auto
+    );
+    if default_restricted {
+        spec.permissions.default = PermissionDefault::Ask;
+    }
+
+    let allow_len = spec.permissions.allow.len();
+    spec.permissions
+        .allow
+        .retain(|rule| !permission_rule_allows_mutation(rule));
+    let auto_len = spec.permissions.auto.len();
+    spec.permissions
+        .auto
+        .retain(|rule| !permission_rule_allows_mutation(rule));
+
+    if default_restricted
+        || spec.permissions.allow.len() != allow_len
+        || spec.permissions.auto.len() != auto_len
+    {
+        spec.warnings
+            .push("plugin subagent permission overrides are restricted for safety".to_string());
     }
 }
 
@@ -2008,6 +2057,50 @@ Plugin prompt"#,
         assert!(spec.mcp_servers.is_empty());
         assert!(spec.hooks.is_none());
         assert_eq!(spec.warnings.len(), 2);
+        Ok(())
+    }
+
+    #[test]
+    fn plugin_restrictions_normalize_permission_overrides() -> Result<()> {
+        let temp = TempDir::new()?;
+        let path = temp.path().join("plugin-agent.md");
+        fs::write(
+            &path,
+            r#"---
+name: plugin-agent
+description: Plugin agent
+permissions:
+  default: auto
+  allow: [read_file, "Read(*)", Bash, "Bash(*)", edit_file, "Edit(/src/**)"]
+  ask: [unified_exec]
+  auto: [unified_search, "Glob(**/*.rs)", Write, "Write(*)", apply_patch, "apply_patch(*)"]
+---
+Plugin prompt"#,
+        )?;
+
+        let spec = load_subagent_from_file(
+            &path,
+            SubagentSource::Plugin {
+                plugin: "demo".to_string(),
+            },
+        )?;
+
+        assert_eq!(spec.permissions.default, PermissionDefault::Ask);
+        assert_eq!(
+            spec.permissions.allow,
+            vec![tools::READ_FILE.to_string(), "Read(*)".to_string()]
+        );
+        assert_eq!(spec.permissions.ask, vec![tools::UNIFIED_EXEC.to_string()]);
+        assert_eq!(
+            spec.permissions.auto,
+            vec![
+                tools::UNIFIED_SEARCH.to_string(),
+                "Glob(**/*.rs)".to_string(),
+            ]
+        );
+        assert!(spec.warnings.iter().any(|warning| {
+            warning == "plugin subagent permission overrides are restricted for safety"
+        }));
         Ok(())
     }
 

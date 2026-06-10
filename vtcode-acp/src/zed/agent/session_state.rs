@@ -60,6 +60,29 @@ impl ZedAgent {
             .unwrap_or_else(|| self.config.model.clone())
     }
 
+    fn session_primary_agent_for_thread(
+        &self,
+        thread: &vtcode_core::core::threads::ThreadRuntimeHandle,
+    ) -> String {
+        thread
+            .metadata()
+            .and_then(|metadata| metadata.primary_agent)
+            .and_then(|primary_agent| self.primary_agents.resolve_id(&primary_agent))
+            .map(ToString::to_string)
+            .unwrap_or_else(|| self.primary_agents.default_id().to_string())
+    }
+
+    fn sync_thread_primary_agent(
+        &self,
+        thread: &vtcode_core::core::threads::ThreadRuntimeHandle,
+        primary_agent: &str,
+    ) {
+        if let Some(mut metadata) = thread.metadata() {
+            metadata.primary_agent = Some(primary_agent.to_string());
+            thread.replace_metadata(Some(metadata));
+        }
+    }
+
     fn sync_thread_provider_and_model(
         &self,
         thread: &vtcode_core::core::threads::ThreadRuntimeHandle,
@@ -87,7 +110,7 @@ impl ZedAgent {
         let reasoning_effort = self.session_reasoning_effort_for_thread(&thread);
         let provider = self.session_provider_for_thread(&thread);
         let model = self.session_model_for_thread(&thread);
-        let primary_agent = self.primary_agents.default_id().to_string();
+        let primary_agent = self.session_primary_agent_for_thread(&thread);
         SessionHandle {
             data: Rc::new(RefCell::new(SessionData {
                 _session_id: session_id,
@@ -154,6 +177,7 @@ impl ZedAgent {
             return false;
         }
         data.primary_agent = primary_agent.to_string();
+        self.sync_thread_primary_agent(&data.thread, &data.primary_agent);
         true
     }
 
@@ -463,7 +487,50 @@ mod tests {
                     "openai",
                     "test",
                     "xhigh",
-                ),
+                )
+                .with_primary_agent("build"),
+                started_at: Utc::now(),
+                ended_at: Utc::now(),
+                total_messages: 0,
+                distinct_tools: Vec::new(),
+                transcript: Vec::new(),
+                messages: Vec::new(),
+                progress: None,
+                error_logs: Vec::new(),
+            },
+        };
+        let thread = agent.thread_manager.start_thread_with_identifier(
+            "session-vtcode-acp-archive",
+            ThreadBootstrap::from_listing(listing),
+        );
+
+        let handle = agent.build_session_handle(acp::SessionId::new("session-1"), thread);
+
+        assert_eq!(handle.data.borrow().primary_agent, "build");
+        assert_eq!(
+            handle.data.borrow().reasoning_effort,
+            ReasoningEffortLevel::XHigh
+        );
+        assert_eq!(handle.data.borrow().provider, "openai");
+        assert_eq!(handle.data.borrow().model, "gpt-5.4");
+    }
+
+    #[tokio::test]
+    async fn build_session_handle_falls_back_for_unknown_metadata_primary_agent() {
+        let temp = TempDir::new().unwrap();
+        let agent = build_agent(temp.path()).await;
+        let listing = SessionListing {
+            path: temp.path().join("session-vtcode-acp-archive.json"),
+            snapshot: SessionSnapshot {
+                metadata: SessionArchiveMetadata::new(
+                    "vtcode",
+                    temp.path().to_string_lossy(),
+                    "gpt-5.4",
+                    "openai",
+                    "test",
+                    "low",
+                )
+                .with_primary_agent("missing"),
                 started_at: Utc::now(),
                 ended_at: Utc::now(),
                 total_messages: 0,
@@ -482,12 +549,6 @@ mod tests {
         let handle = agent.build_session_handle(acp::SessionId::new("session-1"), thread);
 
         assert_eq!(handle.data.borrow().primary_agent, "duck");
-        assert_eq!(
-            handle.data.borrow().reasoning_effort,
-            ReasoningEffortLevel::XHigh
-        );
-        assert_eq!(handle.data.borrow().provider, "openai");
-        assert_eq!(handle.data.borrow().model, "gpt-5.4");
     }
 
     #[tokio::test]
@@ -545,6 +606,17 @@ Research primary prompt."#,
 
         assert!(agent.update_session_primary_agent(&session, "build".to_string()));
         assert_eq!(session.data.borrow().primary_agent, "build");
+        assert_eq!(
+            session
+                .data
+                .borrow()
+                .thread
+                .metadata()
+                .unwrap()
+                .primary_agent
+                .as_deref(),
+            Some("build")
+        );
     }
 
     #[tokio::test]

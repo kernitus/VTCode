@@ -160,6 +160,8 @@ pub struct SessionArchiveMetadata {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_session_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primary_agent: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fork_mode: Option<SessionForkMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub continuation_metadata: Option<SessionContinuationMetadata>,
@@ -263,6 +265,7 @@ impl SessionArchiveMetadata {
             prompt_cache_lineage_id: None,
             external_thread_id: None,
             parent_session_id: None,
+            primary_agent: None,
             fork_mode: None,
             continuation_metadata: None,
         }
@@ -302,6 +305,11 @@ impl SessionArchiveMetadata {
         self
     }
 
+    pub fn with_primary_agent(mut self, primary_agent: impl Into<String>) -> Self {
+        self.primary_agent = Some(primary_agent.into());
+        self
+    }
+
     pub fn with_fork_mode(mut self, fork_mode: SessionForkMode) -> Self {
         self.fork_mode = Some(fork_mode);
         self
@@ -334,6 +342,7 @@ impl SessionArchiveMetadata {
             prompt_cache_lineage_id: self.prompt_cache_lineage_id.clone(),
             external_thread_id: self.external_thread_id.clone(),
             parent_session_id: None,
+            primary_agent: self.primary_agent.clone(),
             fork_mode: None,
             continuation_metadata: None,
         }
@@ -1955,6 +1964,7 @@ fn shrink_snapshot_metadata(metadata: &mut SessionArchiveMetadata) -> bool {
     changed |= shrink_optional_string(&mut metadata.prompt_cache_lineage_id);
     changed |= shrink_optional_string(&mut metadata.external_thread_id);
     changed |= shrink_optional_string(&mut metadata.parent_session_id);
+    changed |= shrink_optional_string(&mut metadata.primary_agent);
 
     for skill in &mut metadata.loaded_skills {
         changed |= shrink_string(skill);
@@ -2064,6 +2074,29 @@ fn is_session_file(path: &Path) -> bool {
                 || ext.eq_ignore_ascii_case("jsonl")
                 || ext.eq_ignore_ascii_case("log")
     )
+}
+
+#[cfg(test)]
+mod metadata_compat_tests {
+    use super::SessionArchiveMetadata;
+
+    #[test]
+    fn primary_agent_metadata_is_backward_compatible() {
+        let metadata = serde_json::from_value::<SessionArchiveMetadata>(serde_json::json!({
+            "workspace_label": "ws",
+            "workspace_path": "/tmp/ws",
+            "model": "gpt-5.4",
+            "provider": "openai",
+            "theme": "test",
+            "reasoning_effort": "low"
+        }))
+        .expect("deserialize metadata without primary_agent");
+
+        assert_eq!(metadata.primary_agent, None);
+
+        let value = serde_json::to_value(&metadata).expect("serialize metadata");
+        assert!(value.get("primary_agent").is_none());
+    }
 }
 
 #[cfg(test)]
