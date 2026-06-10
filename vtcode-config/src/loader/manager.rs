@@ -405,6 +405,12 @@ impl ConfigManager {
         let default_value = toml::Value::try_from(VTCodeConfig::default())
             .context("Failed to serialize default configuration")?;
         Self::prune_default_values(&mut value, &default_value);
+        if let toml::Value::Table(table) = &mut value {
+            table.insert(
+                "default_primary_agent".to_string(),
+                toml::Value::String(config.default_primary_agent.clone()),
+            );
+        }
         Ok(value)
     }
 

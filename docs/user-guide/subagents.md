@@ -77,7 +77,8 @@ Use `- None` for empty sections. If a child reply does not follow this contract,
 name: code-reviewer
 description: Read-only reviewer for correctness, regressions, and test gaps. Use proactively after code changes.
 tools: [read_file, list_files, unified_search]
-permissionMode: plan
+permissions:
+  default: deny
 model: inherit
 color: blue
 reasoning_effort: medium
@@ -156,7 +157,7 @@ Return findings in priority order with file references.
 model = "gpt-5.4-mini"
 model_reasoning_effort = "low"
 maxTurns = 6
-permissionMode = "plan"
+permissions = { default = "deny" }
 ```
 
 VT Code reads `developer_instructions` and also accepts `instructions` for compatibility.
@@ -210,7 +211,7 @@ Only `name` and `description` are required.
 | `color` | TUI color metadata | optional; accepts simple color names such as `blue`, hex like `#4f8fd8`, or Git-style fg/bg strings such as `white #4f8fd8` |
 | `aliases` | alternate names for lookup | exact `name` matches still win over aliases |
 | `reasoning_effort` | per-agent reasoning override | `effort` and `model_reasoning_effort` are also accepted |
-| `permissionMode` / `permission_mode` | permission mode override | `default`, `acceptEdits`, `dontAsk`, `bypassPermissions`, `plan`, `auto`; can only narrow the current session mode for primary agents or the parent mode for child agents |
+| `permissions` | granular permission policy | required; set `default` plus optional `allow`, `ask`, `auto`, and `deny` tool lists |
 | `skills` | skills to preload | primary agents replace the active skill set while selected; subagents preload skills into the child context |
 | `mcpServers` / `mcp_servers` | MCP servers | primary agents can add inline providers while active; subagents can use named or inline providers in the child config overlay |
 | `hooks` | lifecycle hooks | primary agents support main-session events; subagents support child-thread events |
@@ -231,7 +232,7 @@ Only `name` and `description` are required.
 | `mode` | yes | yes |
 | `tools` | yes | yes |
 | `disallowedTools` / `disallowed_tools` | yes | yes |
-| `permissionMode` / `permission_mode` | yes | yes |
+| `permissions` | yes | yes |
 | `model` | yes | yes |
 | `reasoning_effort` | yes | yes |
 | `color` | yes | yes |
@@ -285,14 +286,11 @@ When one or more child threads are active, VT Code shows each active agent name 
 - VT Code always strips child access to `spawn_agent`, `send_input`, `wait_agent`, `resume_agent`, and `close_agent`.
 - If the agent is effectively read-only, VT Code strips mutating tools at runtime even if they are listed.
 
-### Permission Modes
+### Permissions
 
-Subagents inherit the parent approval context and can only stay at or below the parent's permission strength.
+Agents use explicit granular permissions. Set `permissions.default` to the baseline decision and use `allow`, `ask`, `auto`, and `deny` lists for tool-specific policy.
 
-- If the parent is in `auto` or `bypassPermissions`, the parent mode wins.
-- Otherwise the child can request a stricter mode such as `plan` or `dontAsk`.
-
-Primary agents use the same conservative rule: `permissionMode` or `permission_mode` can narrow the current session mode but cannot broaden it.
+Subagents inherit the parent approval context and cannot broaden it. Primary agents apply their granular policy while active without changing the saved startup posture.
 
 ### MCP Servers
 
@@ -311,7 +309,7 @@ mcpServers:
 ---
 ```
 
-Plugin-provided agents are safer by default: VT Code ignores `hooks`, `mcpServers`, and `permissionMode` when those fields come from a plugin agent file.
+Plugin-provided agents are safer by default: VT Code ignores `hooks`, `mcpServers`, and permission policy fields when those fields come from a plugin agent file.
 
 ### Persistent Memory
 
@@ -440,7 +438,8 @@ aliases: [review, critic]
 color: cyan
 tools: [read_file, list_files, unified_search]
 disallowedTools: [unified_exec, unified_file]
-permissionMode: plan
+permissions:
+  default: deny
 model: inherit
 reasoning_effort: medium
 skills: [code-review]
@@ -480,7 +479,8 @@ mode: primary
 aliases: [review, critic]
 color: cyan
 tools: [read_file, list_files, unified_search]
-permissionMode: plan
+permissions:
+  default: deny
 model: inherit
 reasoning_effort: medium
 skills: [code-review]
@@ -500,7 +500,7 @@ Do not edit files directly; provide actionable feedback instead.
 
 2. Set `mode: primary` to make it available as a primary agent (or `mode: all` for both primary and subagent use).
 3. Use `tools` to restrict which tools the agent can access.
-4. Use `permissionMode` to narrow the session's permission mode when this agent is active (`plan`, `dontAsk`, `default`, `acceptEdits`, `auto`, or `bypassPermissions`).
+4. Use `permissions.default` and optional tool lists to define the agent's granular permission policy.
 5. Press `Tab` on an empty idle composer to cycle to the new agent.
 
 The agent definition body (below the frontmatter) becomes the agent's runtime instructions when selected.

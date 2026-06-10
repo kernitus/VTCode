@@ -18,8 +18,8 @@ pub(crate) use dependency_advisories::{SearchToolsBundleNotice, take_search_tool
 use resume::{resolve_session_resume, validate_resume_all_usage};
 use theme::determine_theme;
 use validation::{
-    apply_cli_permission_overrides, apply_permission_mode_override,
-    validate_full_auto_configuration, validate_startup_configuration,
+    apply_cli_permission_overrides, validate_full_auto_configuration,
+    validate_startup_configuration,
 };
 use vtcode_config::auth::{OpenAIChatGptAuthHandle, resolve_openai_auth};
 use vtcode_core::cli::args::{Cli, Commands};
@@ -78,21 +78,7 @@ impl StartupContext {
         let mut config = loaded.config;
         apply_codex_experimental_override(&mut config, args.codex_experimental_override());
 
-        // Determine plan mode: CLI flag takes precedence.
-        let plan_mode_from_cli = args
-            .permission_mode
-            .as_ref()
-            .is_some_and(|m| m.eq_ignore_ascii_case("plan"));
-
-        let plan_mode_entry_source = if plan_mode_from_cli {
-            PlanModeEntrySource::CliFlag
-        } else {
-            PlanModeEntrySource::None
-        };
-
-        if let Some(ref permission_mode) = args.permission_mode {
-            apply_permission_mode_override(&mut config, permission_mode)?;
-        }
+        let plan_mode_entry_source = PlanModeEntrySource::None;
         apply_cli_permission_overrides(&mut config, &args.allowed_tools, &args.disallowed_tools);
 
         // Validate configuration against models database

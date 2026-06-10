@@ -40,7 +40,7 @@ use vtcode_core::tools::handlers::{
 use vtcode_core::tools::{ApprovalRecorder, ToolRegistry, ToolResultCache};
 use vtcode_core::utils::dot_config::load_workspace_trust_level;
 use vtcode_core::{
-    ActivePrimaryAgent, apply_global_notification_config_from_vtcode,
+    ActivePrimaryAgent, ActivePrimaryAgentState, apply_global_notification_config_from_vtcode,
     build_primary_agent_runtime_config, init_global_notification_manager,
 };
 
@@ -301,9 +301,7 @@ pub(crate) async fn initialize_session(
     )
     .await;
     let active_primary_agent = if let Some(controller) = subagent_controller.as_ref() {
-        vtcode_core::primary_agent::ActivePrimaryAgentState::from_specs(
-            &controller.effective_specs().await,
-        )
+        active_primary_agent_from_specs(&controller.effective_specs().await, vt_cfg)
     } else {
         let discovered = vtcode_config::discover_subagents(
             &vtcode_config::SubagentDiscoveryInput::new(config.workspace.clone()),
@@ -314,7 +312,7 @@ pub(crate) async fn initialize_session(
                 config.workspace.display()
             )
         })?;
-        vtcode_core::primary_agent::ActivePrimaryAgentState::from_discovery(&discovered)
+        active_primary_agent_from_specs(&discovered.effective, vt_cfg)
     };
     if let (Some(manager), Some(cfg)) = (async_mcp_manager.as_ref(), vt_cfg) {
         manager
@@ -407,6 +405,16 @@ pub(crate) async fn initialize_session(
         loaded_skills: skill_setup.active_skills_map,
         active_primary_agent,
     })
+}
+
+fn active_primary_agent_from_specs(
+    specs: &[vtcode_config::SubagentSpec],
+    vt_cfg: Option<&VTCodeConfig>,
+) -> ActivePrimaryAgentState {
+    let default_primary_agent = vt_cfg
+        .map(|cfg| cfg.default_primary_agent.as_str())
+        .unwrap_or(vtcode_config::constants::defaults::DEFAULT_PRIMARY_AGENT_NAME);
+    ActivePrimaryAgentState::from_specs_with_default(specs, default_primary_agent)
 }
 
 fn load_startup_update_check() -> crate::updater::StartupUpdateCheck {
@@ -646,6 +654,33 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(provider_names, vec!["global", "local"]);
+    }
+
+    #[test]
+    fn startup_primary_agent_defaults_to_duck_without_config() {
+        let active = active_primary_agent_from_specs(&[test_primary_agent_spec("builder")], None);
+
+        assert_eq!(active.active().identity.name, "duck");
+        assert_eq!(active.active().identity.source, SubagentSource::Builtin);
+    }
+
+    #[test]
+    fn startup_primary_agent_uses_default_primary_agent_config() {
+        let mut cfg = VTCodeConfig {
+            default_primary_agent: "builder".to_string(),
+            ..VTCodeConfig::default()
+        };
+        let active =
+            active_primary_agent_from_specs(&[test_primary_agent_spec("builder")], Some(&cfg));
+
+        assert_eq!(active.active().identity.name, "builder");
+
+        cfg.default_primary_agent = "missing".to_string();
+        let fallback =
+            active_primary_agent_from_specs(&[test_primary_agent_spec("builder")], Some(&cfg));
+
+        assert_eq!(fallback.active().identity.name, "duck");
+        assert_eq!(fallback.active().identity.source, SubagentSource::Builtin);
     }
 
     fn test_primary_agent_spec(name: &str) -> SubagentSpec {

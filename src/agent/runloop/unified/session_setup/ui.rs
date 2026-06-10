@@ -408,7 +408,7 @@ pub(crate) async fn initialize_session_ui(
 
     handle.set_placeholder(default_placeholder.clone());
 
-    let header_context = initialize_header_context(
+    let mut header_context = initialize_header_context(
         &mut renderer,
         &handle,
         &mut context_manager,
@@ -423,6 +423,13 @@ pub(crate) async fn initialize_session_ui(
         },
     )
     .await?;
+    let primary_agent_name = session_state
+        .active_primary_agent
+        .active()
+        .display_name
+        .clone();
+    header_context.primary_agent = Some(primary_agent_name.clone());
+    handle.set_primary_agent(Some(primary_agent_name));
 
     let mut startup_update_notice_rx = None;
     let mut startup_update_task_guard = None;

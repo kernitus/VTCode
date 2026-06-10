@@ -331,6 +331,7 @@ pub(super) struct ExitHeaderDisplay {
     pub(super) editing_mode: vtcode_ui::tui::app::EditingMode,
     pub(super) autonomous_mode: bool,
     pub(super) full_auto: bool,
+    pub(super) primary_agent: Option<String>,
 }
 
 pub(super) fn build_exit_header_context_fast(
@@ -374,7 +375,7 @@ pub(super) fn build_exit_header_context_fast(
             ui::HEADER_MCP_PREFIX,
             ui::HEADER_UNKNOWN_PLACEHOLDER
         ),
-        primary_agent: None,
+        primary_agent: display.primary_agent,
         highlights: Vec::new(),
         subagent_badges: Vec::new(),
         editing_mode: display.editing_mode,

@@ -176,7 +176,7 @@ During chat you can lead with `/` to trigger built-in actions without leaving th
 -   `/agents` — create, inspect, edit, or delete subagent definitions with VT Code-native frontmatter
 -   `/agent` — inspect delegated child threads in the current session
 
-Press **Tab** on an empty idle composer to cycle primary agents. The active primary agent appears in the session header badge and controls the session's instructions, model, permission mode, and tool access.
+Press **Tab** on an empty idle composer to cycle primary agents. The active primary agent appears in the session header badge and controls the session's instructions, model, granular permission policy, and tool access.
 
 Slash commands execute immediately and respect the same tool policies configured in `vtcode.toml`.
 

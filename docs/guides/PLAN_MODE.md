@@ -28,11 +28,13 @@ In Plan Mode, the agent **cannot**:
 
 ### Starting a session in Plan Mode
 
-```bash
-vtcode --permission-mode plan
+Set the default primary agent to `plan` when you want new sessions to start with the built-in planning agent:
+
+```toml
+default_primary_agent = "plan"
 ```
 
-If `permissions.default_mode = "plan"` is set in `vtcode.toml`, VT Code will prompt once at session start to confirm whether to enter Plan Mode. Declining starts in Edit mode.
+You can also start a normal session and enable Plan Mode with `/plan on`.
 
 ### Toggling Plan Mode in a session
 
@@ -44,7 +46,7 @@ If `permissions.default_mode = "plan"` is set in `vtcode.toml`, VT Code will pro
 
 ### Typical workflow
 
-1. **Start in Plan Mode**: `vtcode --permission-mode plan`
+1. **Start with the planning agent**: set `default_primary_agent = "plan"` or run `/plan on`
 2. **Describe your goal**: Explain what you want to build or change
 3. **Iterate on the plan**: Ask clarifying questions, explore files, refine the approach
 4. **Review the plan**: The agent captures repository facts, closes any open decisions, then emits one `<proposed_plan>` block

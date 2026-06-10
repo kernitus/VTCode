@@ -1287,6 +1287,7 @@ pub(super) async fn run_single_agent_loop_unified_impl(
                 },
                 autonomous_mode: session_stats.is_autonomous_mode(),
                 full_auto,
+                primary_agent: Some(active_primary_agent.active().display_name.clone()),
             },
         ));
         if !finalization_succeeded {

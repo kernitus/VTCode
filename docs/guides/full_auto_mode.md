@@ -3,10 +3,10 @@
 Full-auto mode lets VT Code run without pausing for human approval. Use this capability only when
 you fully trust the workspace configuration and have reviewed the safeguards below.
 
-`--full-auto` is intentionally separate from permission `auto` mode:
+`--full-auto` is intentionally separate from normal session permissions:
 
-- `--permission-mode auto` keeps the normal interactive/session runtime and routes risky actions through the background classifier.
-- `--full-auto` uses the explicit `[automation.full_auto]` allow-list and skips the classifier entirely.
+- Normal sessions use primary agents plus the granular `[permissions]` allow/ask/auto/deny policy.
+- `--full-auto` uses the explicit `[automation.full_auto]` allow-list and skips normal approval prompts for allow-listed tools.
 
 ## Activation Checklist
 

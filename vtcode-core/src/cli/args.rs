@@ -294,10 +294,6 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub ide: bool,
 
-    /// Begin in a specified permission mode (default, accept_edits, auto, dont_ask, bypass_permissions, plus legacy ask/suggest/auto-approved/full-auto/trusted_auto/plan)
-    #[arg(long, global = true, value_name = "MODE")]
-    pub permission_mode: Option<String>,
-
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -1287,7 +1283,7 @@ mod exec_command_tests {
         CheckSubcommand, Cli, Commands, DependenciesSubcommand, ExecSubcommand, ManagedDependency,
         PodsCommands,
     };
-    use clap::Parser;
+    use clap::{CommandFactory, Parser};
     use std::path::PathBuf;
 
     #[test]
@@ -1302,6 +1298,20 @@ mod exec_command_tests {
 
         assert!(command.is_none());
         assert_eq!(prompt.as_deref(), Some("count files"));
+    }
+
+    #[test]
+    fn permission_mode_flag_is_not_accepted_or_documented() {
+        assert!(Cli::try_parse_from(["vtcode", "--permission-mode", "plan"]).is_err());
+
+        let mut help = Vec::new();
+        Cli::command()
+            .write_long_help(&mut help)
+            .expect("render help");
+        let help = String::from_utf8(help).expect("utf8 help");
+
+        assert!(!help.contains("--permission-mode"));
+        assert!(!help.contains("permission mode"));
     }
 
     #[test]
@@ -1653,7 +1663,6 @@ impl Default for Cli {
             disallowed_tools: Vec::new(),        // No tool restrictions by default
             dangerously_skip_permissions: false, // Safety confirmations enabled by default
             ide: false,                          // No auto IDE connection by default
-            permission_mode: None,               // Use config permission mode by default
             chrome: false,                       // Chrome integration disabled by default
             no_chrome: false,                    // Chrome integration not explicitly disabled
             command: Some(Commands::Chat),

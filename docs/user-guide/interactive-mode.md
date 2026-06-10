@@ -32,7 +32,7 @@ The VT Code terminal UI includes an interactive mode that combines keyboard-firs
 | `Enter`                                     | Queue the current input.                                                        | Plain input box only.                                                                                                                     |
 | `Tab`                                       | Accept the visible inline suggestion; on an empty idle composer, cycle primary agents; otherwise queue the current input. | Plain input box only. |
 | `Ctrl+Enter`                                | Process now or steer now.                                                       | Idle: runs the current draft, or the newest queued message if the draft is empty. Active: steers the current turn with the current draft. |
-| `Shift+Tab` or `Alt+M`                      | Cycle permission modes.                                                         | Switches Edit, Auto, and Plan modes.                                                                                                      |
+| `Shift+Tab` or `Alt+M`                      | Cycle primary agents.                                                           | Switches between available main-session agents.                                                                                            |
 
 ### Multiline Input
 
@@ -112,7 +112,7 @@ Press `Alt+O` to open the fullscreen transcript review surface. It builds a plai
 - `/agents` opens the subagent manager for creating, inspecting, editing, deleting, and browsing active delegated agents. New scaffolds use VT Code tool ids in frontmatter.
 - `/agent` opens the active-agent inspector. Selecting a child agent opens a modal over the current session instead of switching threads.
 - On an empty idle composer, `Tab` cycles primary agents and wraps back to the first agent.
-- The active primary agent is displayed in the session header badge and influences the session's instructions, model, permission mode, and tool access. Permission overrides from primary agents narrow but never broaden the existing session permissions.
+- The active primary agent is displayed in the session header badge and influences the session's instructions, model, granular permission policy, and tool access.
 - `/subprocesses` opens the Local Agents drawer for delegated agents and managed background subprocesses.
 
 ## Scheduled Prompts And Reminders

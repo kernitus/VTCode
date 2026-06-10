@@ -6,51 +6,6 @@ use vtcode_core::config::validator::ConfigValidator;
 use vtcode_core::tools::RipgrepStatus;
 use vtcode_core::utils::path::canonicalize_workspace;
 
-pub(super) fn apply_permission_mode_override(config: &mut VTCodeConfig, mode: &str) -> Result<()> {
-    use vtcode_config::constants::tools;
-
-    match mode.to_lowercase().as_str() {
-        "default" | "accept_edits" | "accept-edits" | "acceptedits" | "auto" | "trusted_auto"
-        | "trusted-auto" | "dont_ask" | "dont-ask" | "dontask" | "bypass_permissions"
-        | "bypass-permissions" | "bypasspermissions" => {}
-        "ask" => {
-            config.security.human_in_the_loop = true;
-            config.security.require_write_tool_for_claims = true;
-            config.automation.full_auto.enabled = false;
-        }
-        "suggest" => {
-            config.security.human_in_the_loop = true;
-            config.security.require_write_tool_for_claims = false;
-            config.automation.full_auto.enabled = false;
-        }
-        "auto-approved" => {
-            config.security.human_in_the_loop = false;
-            config.security.require_write_tool_for_claims = false;
-            config.automation.full_auto.enabled = true;
-            config.automation.full_auto.allowed_tools = vec![
-                tools::READ_FILE.to_string(),
-                tools::LIST_FILES.to_string(),
-                tools::GREP_FILE.to_string(),
-            ];
-        }
-        "full-auto" => {
-            config.security.human_in_the_loop = false;
-            config.security.require_write_tool_for_claims = false;
-            config.automation.full_auto.enabled = true;
-            config.automation.full_auto.allowed_tools = vec![];
-        }
-        "plan" => {}
-        _ => {
-            bail!(
-                "Invalid permission mode '{}'. Valid options: default, accept_edits, auto, dont_ask, bypass_permissions, ask, suggest, auto-approved, full-auto, trusted_auto, plan",
-                mode
-            );
-        }
-    }
-
-    Ok(())
-}
-
 pub(super) fn apply_cli_permission_overrides(
     config: &mut VTCodeConfig,
     allowed_tools: &[String],

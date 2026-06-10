@@ -102,7 +102,17 @@ impl ActivePrimaryAgentState {
 
     #[must_use]
     pub fn from_specs(specs: &[SubagentSpec]) -> Self {
-        let active = resolve_primary_agent(specs, DEFAULT_PRIMARY_AGENT_NAME)
+        Self::from_specs_with_default(specs, DEFAULT_PRIMARY_AGENT_NAME)
+    }
+
+    #[must_use]
+    pub fn from_specs_with_default(specs: &[SubagentSpec], requested_default: &str) -> Self {
+        let requested = if requested_default.trim().is_empty() {
+            DEFAULT_PRIMARY_AGENT_NAME
+        } else {
+            requested_default.trim()
+        };
+        let active = resolve_primary_agent(specs, requested)
             .unwrap_or_else(|_| ActivePrimaryAgent::from_spec(&builtin_primary_duck_agent()));
         Self { active }
     }
@@ -547,6 +557,23 @@ mod tests {
     #[test]
     fn from_specs_falls_back_to_builtin_duck_agent() {
         let active = ActivePrimaryAgentState::from_specs(&[]);
+
+        assert_eq!(active.active().identity.name, "duck");
+        assert_eq!(active.active().identity.source, SubagentSource::Builtin);
+    }
+
+    #[test]
+    fn from_specs_with_default_selects_configured_primary_agent() {
+        let active =
+            ActivePrimaryAgentState::from_specs_with_default(&[test_spec("builder")], "builder");
+
+        assert_eq!(active.active().identity.name, "builder");
+    }
+
+    #[test]
+    fn from_specs_with_default_falls_back_to_duck_for_missing_configured_agent() {
+        let active =
+            ActivePrimaryAgentState::from_specs_with_default(&[test_spec("builder")], "missing");
 
         assert_eq!(active.active().identity.name, "duck");
         assert_eq!(active.active().identity.source, SubagentSource::Builtin);
