@@ -104,6 +104,7 @@ pub async fn handle_init_command(workspace: &Path, force: bool, run: bool) -> Re
             None,
             false,
             false,
+            false,
             PlanningEntrySource::None,
             None,
         )

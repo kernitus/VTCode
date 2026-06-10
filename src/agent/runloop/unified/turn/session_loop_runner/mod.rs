@@ -54,6 +54,7 @@ pub(super) async fn run_single_agent_loop_unified_impl(
     initial_vt_cfg: Option<VTCodeConfig>,
     skip_confirmations: bool,
     full_auto: bool,
+    primary_agent_explicitly_configured: bool,
     planning_entry_source: PlanningEntrySource,
     resume: Option<ResumeSession>,
     steering_receiver: &mut Option<mpsc::UnboundedReceiver<SteeringMessage>>,
@@ -217,6 +218,7 @@ pub(super) async fn run_single_agent_loop_unified_impl(
             &config,
             vt_cfg.as_ref(),
             full_auto,
+            primary_agent_explicitly_configured,
             resume_ref,
             thread_handle.thread_id().as_str(),
         )

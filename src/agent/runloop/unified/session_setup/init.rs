@@ -14,7 +14,7 @@ use crate::agent::runloop::unified::state::should_enforce_safe_mode_prompts;
 use crate::agent::runloop::unified::tool_call_safety::ToolCallSafetyValidator;
 use crate::agent::runloop::unified::tool_catalog::ToolCatalogState;
 use crate::agent::runloop::welcome::prepare_session_bootstrap;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use hashbrown::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -104,6 +104,7 @@ pub(crate) async fn initialize_session(
     config: &CoreAgentConfig,
     vt_cfg: Option<&VTCodeConfig>,
     full_auto: bool,
+    primary_agent_explicitly_configured: bool,
     resume: Option<&ResumeSession>,
     parent_session_id: &str,
 ) -> Result<SessionState> {
@@ -305,7 +306,12 @@ pub(crate) async fn initialize_session(
     )
     .await;
     let active_primary_agent = if let Some(controller) = subagent_controller.as_ref() {
-        active_primary_agent_from_specs(&controller.effective_specs().await, vt_cfg)
+        active_primary_agent_from_specs(
+            &controller.effective_specs().await,
+            vt_cfg,
+            full_auto,
+            primary_agent_explicitly_configured,
+        )?
     } else {
         let discovered = vtcode_config::discover_subagents(
             &vtcode_config::SubagentDiscoveryInput::new(config.workspace.clone()),
@@ -316,7 +322,12 @@ pub(crate) async fn initialize_session(
                 config.workspace.display()
             )
         })?;
-        active_primary_agent_from_specs(&discovered.effective, vt_cfg)
+        active_primary_agent_from_specs(
+            &discovered.effective,
+            vt_cfg,
+            full_auto,
+            primary_agent_explicitly_configured,
+        )?
     };
     if let (Some(manager), Some(cfg)) = (async_mcp_manager.as_ref(), vt_cfg) {
         manager
@@ -414,11 +425,33 @@ pub(crate) async fn initialize_session(
 fn active_primary_agent_from_specs(
     specs: &[vtcode_config::SubagentSpec],
     vt_cfg: Option<&VTCodeConfig>,
-) -> ActivePrimaryAgentState {
+) -> Result<ActivePrimaryAgentState> {
+    active_primary_agent_from_specs_for_mode(specs, vt_cfg, false, false)
+}
+
+fn active_primary_agent_from_specs_for_mode(
+    specs: &[vtcode_config::SubagentSpec],
+    vt_cfg: Option<&VTCodeConfig>,
+    full_auto: bool,
+    primary_agent_explicitly_configured: bool,
+) -> Result<ActivePrimaryAgentState> {
+    if full_auto && !primary_agent_explicitly_configured {
+        let mut active = ActivePrimaryAgentState::default();
+        if active.select_from_specs(specs, "auto").is_err() {
+            bail!(
+                "Full-auto needs the defaulted 'auto' primary agent, but no effective primary agent named 'auto' was discovered. Configure default_primary_agent explicitly or add an 'auto' primary agent."
+            );
+        }
+        return Ok(active);
+    }
+
     let default_primary_agent = vt_cfg
         .map(|cfg| cfg.default_primary_agent.as_str())
         .unwrap_or(vtcode_config::constants::defaults::DEFAULT_PRIMARY_AGENT_NAME);
-    ActivePrimaryAgentState::from_specs_with_default(specs, default_primary_agent)
+    Ok(ActivePrimaryAgentState::from_specs_with_default(
+        specs,
+        default_primary_agent,
+    ))
 }
 
 fn load_startup_update_check() -> crate::updater::StartupUpdateCheck {
@@ -665,7 +698,8 @@ mod tests {
 
     #[test]
     fn startup_primary_agent_defaults_to_duck_without_config() {
-        let active = active_primary_agent_from_specs(&[test_primary_agent_spec("builder")], None);
+        let active = active_primary_agent_from_specs(&[test_primary_agent_spec("builder")], None)
+            .expect("default primary agent");
 
         assert_eq!(active.active().identity.name, "duck");
         assert_eq!(active.active().identity.source, SubagentSource::Builtin);
@@ -678,16 +712,78 @@ mod tests {
             ..VTCodeConfig::default()
         };
         let active =
-            active_primary_agent_from_specs(&[test_primary_agent_spec("builder")], Some(&cfg));
+            active_primary_agent_from_specs(&[test_primary_agent_spec("builder")], Some(&cfg))
+                .expect("configured primary agent");
 
         assert_eq!(active.active().identity.name, "builder");
 
         cfg.default_primary_agent = "missing".to_string();
         let fallback =
-            active_primary_agent_from_specs(&[test_primary_agent_spec("builder")], Some(&cfg));
+            active_primary_agent_from_specs(&[test_primary_agent_spec("builder")], Some(&cfg))
+                .expect("fallback primary agent");
 
         assert_eq!(fallback.active().identity.name, "duck");
         assert_eq!(fallback.active().identity.source, SubagentSource::Builtin);
+    }
+
+    #[test]
+    fn full_auto_with_defaulted_primary_agent_selects_effective_auto() {
+        let mut auto = test_primary_agent_spec("auto");
+        auto.prompt = "Custom auto instructions".to_string();
+
+        let active =
+            active_primary_agent_from_specs_for_mode(&[auto], None, true, false).expect("auto");
+
+        assert_eq!(active.active().identity.name, "auto");
+        assert_eq!(active.active().instructions, "Custom auto instructions");
+    }
+
+    #[test]
+    fn full_auto_honours_explicit_primary_agent_config() {
+        let cfg = VTCodeConfig {
+            default_primary_agent: "builder".to_string(),
+            ..VTCodeConfig::default()
+        };
+        let specs = [
+            test_primary_agent_spec("auto"),
+            test_primary_agent_spec("builder"),
+        ];
+
+        let active = active_primary_agent_from_specs_for_mode(&specs, Some(&cfg), true, true)
+            .expect("explicit builder");
+
+        assert_eq!(active.active().identity.name, "builder");
+    }
+
+    #[test]
+    fn full_auto_honours_explicit_duck_primary_agent_config() {
+        let cfg = VTCodeConfig {
+            default_primary_agent: "duck".to_string(),
+            ..VTCodeConfig::default()
+        };
+        let specs = [test_primary_agent_spec("auto")];
+
+        let active = active_primary_agent_from_specs_for_mode(&specs, Some(&cfg), true, true)
+            .expect("explicit duck");
+
+        assert_eq!(active.active().identity.name, "duck");
+        assert_eq!(active.active().identity.source, SubagentSource::Builtin);
+    }
+
+    #[test]
+    fn full_auto_missing_defaulted_auto_fails_fast() {
+        let err = active_primary_agent_from_specs_for_mode(
+            &[test_primary_agent_spec("builder")],
+            None,
+            true,
+            false,
+        )
+        .expect_err("missing auto should fail");
+
+        assert!(
+            err.to_string()
+                .contains("no effective primary agent named 'auto' was discovered")
+        );
     }
 
     fn test_primary_agent_spec(name: &str) -> SubagentSpec {

@@ -99,6 +99,7 @@ pub async fn handle_resume_session_command(
                 None,
                 skip_confirmations,
                 false,
+                false,
                 PlanningEntrySource::None,
                 None,
             )
@@ -432,6 +433,7 @@ async fn run_single_agent_loop(
         &resume_config,
         None,
         skip_confirmations,
+        false,
         false,
         PlanningEntrySource::None,
         Some(resume),

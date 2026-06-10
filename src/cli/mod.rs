@@ -99,6 +99,7 @@ pub async fn dispatch(
                 startup.config.clone(),
                 startup.skip_confirmations,
                 startup.full_auto_requested,
+                startup.primary_agent_explicitly_configured,
                 startup.planning_entry_source,
             )
             .await?;
@@ -166,6 +167,7 @@ mod tests {
             skip_confirmations: false,
             full_auto_requested: false,
             automation_prompt: None,
+            primary_agent_explicitly_configured: false,
             session_resume: None,
             resume_show_all: false,
             custom_session_id: None,

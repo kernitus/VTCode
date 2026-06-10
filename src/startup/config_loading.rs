@@ -14,6 +14,7 @@ pub(super) struct LoadedStartupConfig {
     pub(super) first_run_occurred: bool,
     pub(super) full_auto_requested: bool,
     pub(super) automation_prompt: Option<String>,
+    pub(super) primary_agent_explicitly_configured: bool,
 }
 
 pub(super) async fn load_startup_config(args: &Cli) -> Result<LoadedStartupConfig> {
@@ -64,6 +65,8 @@ pub(super) async fn load_startup_config(args: &Cli) -> Result<LoadedStartupConfi
     }
 
     let manager = builder.build().context("Failed to load configuration")?;
+    let primary_agent_explicitly_configured =
+        has_top_level_config_key(&manager.effective_config(), "default_primary_agent");
     let mut config = manager.config().clone();
 
     let (full_auto_requested, automation_prompt) = match args.full_auto.clone() {
@@ -86,7 +89,14 @@ pub(super) async fn load_startup_config(args: &Cli) -> Result<LoadedStartupConfi
         first_run_occurred,
         full_auto_requested,
         automation_prompt,
+        primary_agent_explicitly_configured,
     })
+}
+
+fn has_top_level_config_key(config: &toml::Value, key: &str) -> bool {
+    config
+        .as_table()
+        .is_some_and(|table| table.contains_key(key))
 }
 
 #[cfg(test)]
@@ -126,5 +136,20 @@ enable_tracing = true
             .expect("startup config should load");
 
         assert!(loaded.config.debug.enable_tracing);
+    }
+
+    #[test]
+    fn detects_explicit_default_primary_agent_key() {
+        let with_key: toml::Value = r#"default_primary_agent = "duck""#.parse().expect("toml");
+        let without_key: toml::Value = r#"[agent]
+provider = "openai""#
+            .parse()
+            .expect("toml");
+
+        assert!(has_top_level_config_key(&with_key, "default_primary_agent"));
+        assert!(!has_top_level_config_key(
+            &without_key,
+            "default_primary_agent"
+        ));
     }
 }

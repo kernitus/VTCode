@@ -35,6 +35,7 @@ pub(crate) async fn handle_chat_command(
     vt_cfg: VTCodeConfig,
     skip_confirmations: bool,
     full_auto_requested: bool,
+    primary_agent_explicitly_configured: bool,
     planning_entry_source: PlanningEntrySource,
 ) -> Result<()> {
     crate::agent::agents::run_single_agent_loop(
@@ -42,6 +43,7 @@ pub(crate) async fn handle_chat_command(
         Some(vt_cfg),
         skip_confirmations,
         full_auto_requested,
+        primary_agent_explicitly_configured,
         planning_entry_source,
         None,
     )

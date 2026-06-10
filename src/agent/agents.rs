@@ -132,6 +132,7 @@ pub(crate) async fn run_single_agent_loop(
     initial_vt_cfg: Option<VTCodeConfig>,
     skip_confirmations: bool,
     full_auto: bool,
+    primary_agent_explicitly_configured: bool,
     planning_entry_source: PlanningEntrySource,
     resume: Option<SessionContinuation>,
 ) -> Result<()> {
@@ -159,6 +160,7 @@ pub(crate) async fn run_single_agent_loop(
         vt_cfg,
         skip_confirmations,
         full_auto,
+        primary_agent_explicitly_configured,
         planning_entry_source,
         resume,
         &mut steering_receiver,
