@@ -827,53 +827,41 @@ pub(super) fn process_key(session: &mut Session, key: KeyEvent) -> Option<Inline
                         session.move_right_word();
                         session.mark_dirty();
                     }
-                    'd' | 'D' => {
-                        // Alt+D: Kill (cut) forwards to the end of the current word
-                        if session.core.input_enabled() {
-                            session.delete_word_forward();
-                            session.update_input_triggers();
-                            session.mark_dirty();
-                        }
+                    // Alt+D: Kill (cut) forwards to the end of the current word
+                    'd' | 'D' if session.core.input_enabled() => {
+                        session.delete_word_forward();
+                        session.update_input_triggers();
+                        session.mark_dirty();
                     }
-                    'u' | 'U' => {
-                        // Alt+U: Uppercase the current word
-                        if session.core.input_enabled() {
-                            session.uppercase_word();
-                            session.update_input_triggers();
-                            session.mark_dirty();
-                        }
+                    // Alt+U: Uppercase the current word
+                    'u' | 'U' if session.core.input_enabled() => {
+                        session.uppercase_word();
+                        session.update_input_triggers();
+                        session.mark_dirty();
                     }
-                    'l' | 'L' => {
-                        // Alt+L: Lowercase the current word
-                        if session.core.input_enabled() {
-                            session.lowercase_word();
-                            session.update_input_triggers();
-                            session.mark_dirty();
-                        }
+                    // Alt+L: Lowercase the current word
+                    'l' | 'L' if session.core.input_enabled() => {
+                        session.lowercase_word();
+                        session.update_input_triggers();
+                        session.mark_dirty();
                     }
-                    'c' | 'C' => {
-                        // Alt+C: Capitalize the current word
-                        if session.core.input_enabled() {
-                            session.capitalize_word();
-                            session.update_input_triggers();
-                            session.mark_dirty();
-                        }
+                    // Alt+C: Capitalize the current word
+                    'c' | 'C' if session.core.input_enabled() => {
+                        session.capitalize_word();
+                        session.update_input_triggers();
+                        session.mark_dirty();
                     }
-                    't' | 'T' => {
-                        // Alt+T: Transpose words
-                        if session.core.input_enabled() {
-                            session.transpose_words();
-                            session.update_input_triggers();
-                            session.mark_dirty();
-                        }
+                    // Alt+T: Transpose words
+                    't' | 'T' if session.core.input_enabled() => {
+                        session.transpose_words();
+                        session.update_input_triggers();
+                        session.mark_dirty();
                     }
-                    '\\' => {
-                        // Alt+\: Delete whitespace around the cursor
-                        if session.core.input_enabled() {
-                            session.delete_whitespace_around_cursor();
-                            session.update_input_triggers();
-                            session.mark_dirty();
-                        }
+                    // Alt+\: Delete whitespace around the cursor
+                    '\\' if session.core.input_enabled() => {
+                        session.delete_whitespace_around_cursor();
+                        session.update_input_triggers();
+                        session.mark_dirty();
                     }
                     _ => {}
                 }
