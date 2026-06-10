@@ -1194,9 +1194,9 @@ fn parse_required_permissions(
         bail!("unsupported legacy subagent field '{legacy_field}'; use 'permissions.default'");
     }
 
-    let value = object
-        .get("permissions")
-        .ok_or_else(|| anyhow!("missing required subagent field 'permissions.default'"))?;
+    let Some(value) = object.get("permissions") else {
+        return Ok(AgentPermissionsConfig::new(PermissionDefault::Ask));
+    };
 
     serde_json::from_value::<AgentPermissionsConfig>(value.clone())
         .context("failed to parse subagent permissions")
@@ -1516,7 +1516,7 @@ Prompt."#
     }
 
     #[test]
-    fn rejects_missing_permissions_default() -> Result<()> {
+    fn defaults_missing_permissions_to_ask() -> Result<()> {
         let temp = TempDir::new()?;
         let path = temp.path().join("missing-permissions.md");
         fs::write(
@@ -1528,8 +1528,12 @@ description: Missing permissions
 Prompt."#,
         )?;
 
-        let err = load_subagent_from_file(&path, SubagentSource::ProjectVtcode).unwrap_err();
-        assert!(err.to_string().contains("permissions.default"));
+        let spec = load_subagent_from_file(&path, SubagentSource::ProjectVtcode)?;
+        assert_eq!(spec.permissions.default, PermissionDefault::Ask);
+        assert!(spec.permissions.allow.is_empty());
+        assert!(spec.permissions.ask.is_empty());
+        assert!(spec.permissions.auto.is_empty());
+        assert!(spec.permissions.deny.is_empty());
         Ok(())
     }
 
