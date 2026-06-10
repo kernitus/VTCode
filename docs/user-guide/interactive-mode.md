@@ -141,7 +141,7 @@ VT Code supports an optional Vim-style prompt editor.
 - VT Code routes prompt suggestion generation through `agent.prompt_suggestions` and falls back to deterministic local suggestions when the provider, model, or endpoint cannot service the request.
 - LLM-backed prompt suggestions can consume tokens. When `agent.prompt_suggestions.show_cost_notice = true`, VT Code shows a one-time reminder in the session before the first LLM-backed inline suggestion.
 - Picking a suggestion inserts it into the composer. Empty drafts are replaced; non-empty drafts keep their content and append the suggestion after a blank line.
-- `/tasks` toggles the dedicated TODO panel. It is fed directly from `task_tracker` and `plan_task_tracker` output and remains independent from the `Ctrl+T` log toggle.
+- `/tasks` toggles the dedicated TODO panel. It is fed directly from `task_tracker` output and remains independent from the `Ctrl+T` log toggle.
 - `/jobs` opens the active/background jobs picker for PTY-backed command sessions.
 - In `/jobs`, `Enter` or `Ctrl+R` focuses the selected job output, `Ctrl+P` previews a snapshot modal, and `Ctrl+X` sends an interrupt to the selected job.
 - Pressing `Enter` on an empty draft opens `/jobs` when active jobs exist; otherwise VT Code keeps the normal empty-enter behavior.
@@ -169,13 +169,13 @@ When a task is already running, VT Code keeps the active turn alive and lets you
 - VT Code uses read-only `gh` inspection for this status. If `gh` is missing or unauthenticated, the header shows the appropriate CTA instead of failing the session.
 - The badge refreshes as branch and HEAD state change, and warnings appear when your review is outdated or you do not have write access.
 
-## Plan Mode Notes
+## Planning Workflow Notes
 
-- Plan Mode is strict read-only (except optional writes under `.vtcode/plans/` for plan artifacts).
+- The built-in `plan` primary agent is read-oriented and intended for repository exploration, trade-off discussion, and proposal drafting.
+- `/plan` starts or continues the planning workflow command; it is not a session state selector.
 - The agent emits planning output in `<proposed_plan>...</proposed_plan>` blocks.
-- `task_tracker` works in Plan Mode and mirrors checklist state with plan sidecars; `plan_task_tracker` remains as a compatibility alias.
-- After a plan is emitted, VT Code shows an implementation choice: switch to Edit mode and execute, or continue planning.
-- If automatic Plan->Edit switching fails, manually switch with `/plan off` or `/mode`, or use `Shift+Tab`/`Alt+M`.
+- `task_tracker` mirrors checklist state with plan sidecars where planning artefacts are enabled.
+- When you are ready to implement, switch to a build-oriented primary agent such as `build` or `auto`.
 
 ## Command History
 

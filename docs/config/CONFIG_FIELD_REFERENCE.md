@@ -32,7 +32,7 @@ python3 scripts/generate_config_field_reference.py
 | `agent.codex_app_server.args` | `array` | no | `["app-server"]` | Arguments passed before VT Code appends `--listen stdio://`. |
 | `agent.codex_app_server.args[]` | `string` | no | `-` | - |
 | `agent.codex_app_server.command` | `string` | no | `"codex"` | Executable used to launch the official Codex app-server sidecar. |
-| `agent.codex_app_server.experimental_features` | `boolean` | no | `false` | Enable experimental Codex app-server features such as collaboration modes and native review routing. |
+| `agent.codex_app_server.experimental_features` | `boolean` | no | `false` | Enable experimental Codex app-server features such as collaboration workflows and native review routing. |
 | `agent.codex_app_server.startup_timeout_secs` | `integer` | no | `10` | Maximum startup handshake time when launching the sidecar. |
 | `agent.credential_storage_mode` | `string` | no | `"keyring"` | Preferred storage backend for credentials (OAuth tokens, API keys, etc.) - `keyring`: Use OS-specific secure storage (macOS Keychain, Windows Credential Manager, Linux Secret Service). This is the default as it's the most secure. - `file`: Use AES-256-GCM encrypted file with machine-derived key - `auto`: Try keyring first, fall back to file if unavailable |
 | `agent.custom_api_keys` | `object` | no | `-` | Provider-specific API keys captured from interactive configuration flows Note: Actual API keys are stored securely in the OS keyring. This field only tracks which providers have keys stored (for UI/migration purposes). The keys themselves are NOT serialized to the config file for security. |
@@ -105,13 +105,13 @@ python3 scripts/generate_config_field_reference.py
 | `agent.prompt_suggestions.model` | `string` | no | `""` | Lightweight model to use for suggestions. Leave empty to auto-select an efficient sibling of the main model. |
 | `agent.prompt_suggestions.show_cost_notice` | `boolean` | no | `true` | Whether VT Code should remind users that LLM-backed suggestions consume tokens. |
 | `agent.prompt_suggestions.temperature` | `number` | no | `0.30000001192092896` | Temperature for inline prompt suggestion generation. |
-| `agent.provider` | `string` | no | `"openrouter"` | AI provider for single agent mode (gemini, openai, anthropic, openrouter, zai) |
+| `agent.provider` | `string` | no | `"openrouter"` | AI provider for single-agent sessions (gemini, openai, anthropic, openrouter, zai) |
 | `agent.reasoning_effort` | `string` | no | `"none"` | Reasoning effort level for models that support it (none, minimal, low, medium, high, xhigh, max) Applies to: Claude, GPT-5 family, Gemini, Qwen3, DeepSeek with reasoning capability |
 | `agent.refine_prompts_enabled` | `boolean` | no | `false` | Enable prompt refinement pass before sending to LLM |
 | `agent.refine_prompts_max_passes` | `integer` | no | `1` | Max refinement passes for prompt writing |
 | `agent.refine_prompts_model` | `string` | no | `""` | Optional model override for the refiner (empty = auto pick efficient sibling) |
 | `agent.refine_temperature` | `number` | no | `0.30000001192092896` | Temperature for prompt refinement (0.0-1.0, default: 0.3) Lower values ensure prompt refinement is more deterministic/consistent Keep lower than main temperature for stable prompt improvement |
-| `agent.require_plan_confirmation` | `boolean` | no | `true` | Require user confirmation before executing a plan generated in plan mode When true, exiting plan mode shows the implementation blueprint and requires explicit user approval before enabling edit tools. |
+| `agent.require_plan_confirmation` | `boolean` | no | `true` | Require user confirmation before executing a planning workflow proposal. When true, VT Code shows the implementation blueprint and requires explicit user approval before build-oriented agents proceed. |
 | `agent.small_model.enabled` | `boolean` | no | `true` | Enable small model tier for efficient operations |
 | `agent.small_model.model` | `string` | no | `""` | Small model to use (e.g., claude-4-5-haiku, "gpt-4-mini", "gemini-2.0-flash") Leave empty to auto-select a lightweight sibling of the main model |
 | `agent.small_model.temperature` | `number` | no | `0.30000001192092896` | Temperature for small model responses |
@@ -447,25 +447,25 @@ python3 scripts/generate_config_field_reference.py
 | `permissions.ask[]` | `string` | no | `-` | - |
 | `permissions.audit_directory` | `string` | no | `"~/.vtcode/audit"` | Directory for audit logs (created if not exists) Defaults to ~/.vtcode/audit |
 | `permissions.audit_enabled` | `boolean` | no | `true` | Enable audit logging of all permission decisions |
-| `permissions.auto_mode.allow_exceptions` | `array` | no | `["Allow read-only tools and read-only browsing/search actions.", "Allow file edits and writes inside the current work...` | Narrow allow exceptions applied after block rules. |
-| `permissions.auto_mode.allow_exceptions[]` | `string` | no | `-` | - |
-| `permissions.auto_mode.block_rules` | `array` | no | `["Block destructive source-control actions such as force-pushes, direct pushes to protected branches, or remote branc...` | Classifier block rules applied in stage 2 reasoning. |
-| `permissions.auto_mode.block_rules[]` | `string` | no | `-` | - |
-| `permissions.auto_mode.drop_broad_allow_rules` | `boolean` | no | `true` | Drop broad code-execution allow rules while auto mode is active. |
-| `permissions.auto_mode.environment.trusted_domains` | `array` | no | `[]` | - |
-| `permissions.auto_mode.environment.trusted_domains[]` | `string` | no | `-` | - |
-| `permissions.auto_mode.environment.trusted_git_hosts` | `array` | no | `[]` | - |
-| `permissions.auto_mode.environment.trusted_git_hosts[]` | `string` | no | `-` | - |
-| `permissions.auto_mode.environment.trusted_git_orgs` | `array` | no | `[]` | - |
-| `permissions.auto_mode.environment.trusted_git_orgs[]` | `string` | no | `-` | - |
-| `permissions.auto_mode.environment.trusted_paths` | `array` | no | `[]` | - |
-| `permissions.auto_mode.environment.trusted_paths[]` | `string` | no | `-` | - |
-| `permissions.auto_mode.environment.trusted_services` | `array` | no | `[]` | - |
-| `permissions.auto_mode.environment.trusted_services[]` | `string` | no | `-` | - |
-| `permissions.auto_mode.max_consecutive_denials` | `integer` | no | `3` | Maximum consecutive denials before auto mode falls back. |
-| `permissions.auto_mode.max_total_denials` | `integer` | no | `20` | Maximum total denials before auto mode falls back. |
-| `permissions.auto_mode.model` | `string` | no | `""` | Optional model override for the transcript reviewer. |
-| `permissions.auto_mode.probe_model` | `string` | no | `""` | Optional model override for the prompt-injection probe. |
+| `permissions.auto.allow_exceptions` | `array` | no | `["Allow read-only tools and read-only browsing/search actions.", "Allow file edits and writes inside the current work...` | Narrow allow exceptions applied after block rules. |
+| `permissions.auto.allow_exceptions[]` | `string` | no | `-` | - |
+| `permissions.auto.block_rules` | `array` | no | `["Block destructive source-control actions such as force-pushes, direct pushes to protected branches, or remote branc...` | Classifier block rules applied in stage 2 reasoning. |
+| `permissions.auto.block_rules[]` | `string` | no | `-` | - |
+| `permissions.auto.drop_broad_allow_rules` | `boolean` | no | `true` | Drop broad code-execution allow rules before classifier-backed review. |
+| `permissions.auto.environment.trusted_domains` | `array` | no | `[]` | - |
+| `permissions.auto.environment.trusted_domains[]` | `string` | no | `-` | - |
+| `permissions.auto.environment.trusted_git_hosts` | `array` | no | `[]` | - |
+| `permissions.auto.environment.trusted_git_hosts[]` | `string` | no | `-` | - |
+| `permissions.auto.environment.trusted_git_orgs` | `array` | no | `[]` | - |
+| `permissions.auto.environment.trusted_git_orgs[]` | `string` | no | `-` | - |
+| `permissions.auto.environment.trusted_paths` | `array` | no | `[]` | - |
+| `permissions.auto.environment.trusted_paths[]` | `string` | no | `-` | - |
+| `permissions.auto.environment.trusted_services` | `array` | no | `[]` | - |
+| `permissions.auto.environment.trusted_services[]` | `string` | no | `-` | - |
+| `permissions.auto.max_consecutive_denials` | `integer` | no | `3` | Maximum consecutive classifier denials before manual review fallback. |
+| `permissions.auto.max_total_denials` | `integer` | no | `20` | Maximum total classifier denials before manual review fallback. |
+| `permissions.auto.model` | `string` | no | `""` | Optional model override for the transcript reviewer. |
+| `permissions.auto.probe_model` | `string` | no | `""` | Optional model override for the prompt-injection probe. |
 | `permissions.cache_enabled` | `boolean` | no | `true` | Enable permission decision caching to avoid redundant evaluations |
 | `permissions.cache_ttl_seconds` | `integer` | no | `300` | Cache time-to-live in seconds (how long to cache decisions) Default: 300 seconds (5 minutes) |
 | `permissions.deny` | `array` | no | `[]` | Rules that deny matching tool calls. |
@@ -501,7 +501,7 @@ python3 scripts/generate_config_field_reference.py
 | `prompt_cache.providers.openai.enabled` | `boolean` | no | `true` | - |
 | `prompt_cache.providers.openai.idle_expiration_seconds` | `integer` | no | `3600` | - |
 | `prompt_cache.providers.openai.min_prefix_tokens` | `integer` | no | `1024` | - |
-| `prompt_cache.providers.openai.prompt_cache_key_mode` | `string` | no | `"session"` | Strategy for generating OpenAI `prompt_cache_key`. Session mode derives one stable key per VT Code conversation. |
+| `prompt_cache.providers.openai.prompt_cache_key_mode` | `string` | no | `"session"` | Strategy for generating OpenAI `prompt_cache_key`. The session strategy derives one stable key per VT Code conversation. |
 | `prompt_cache.providers.openai.prompt_cache_retention` | `null \| string` | no | `null` | Optional prompt cache retention string to pass directly into OpenAI Responses API. Supported values are "in_memory" and "24h". If set, VT Code will include `prompt_cache_retention` in the request body to extend the model-side prompt caching window or request the explicit in-memory policy. |
 | `prompt_cache.providers.openai.surface_metrics` | `boolean` | no | `true` | - |
 | `prompt_cache.providers.openrouter.enabled` | `boolean` | no | `true` | - |

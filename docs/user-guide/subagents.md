@@ -21,13 +21,15 @@ For new `.vtcode/agents/*.md` files, use VT Code tool ids in frontmatter. Claude
 
 | Agent | Default model | Mutates files? | Purpose |
 | --- | --- | --- | --- |
-| `build` | `inherit` | yes | Default implementation agent for the main session |
+| `build` | `inherit` | yes | Implementation agent for normal build and repair work |
+| `auto` | `inherit` | yes, classifier-reviewed | Build-oriented agent that routes configured tools through `permissions.auto` |
+| `plan` | `inherit` | no | Planning workflow agent for repository exploration and proposal drafting |
 | `duck` | `inherit` | no | Discussion-first agent for scope, constraints, and trade-offs |
-| `plan` | `inherit` | no | Read-only planning agent available as both primary and delegated child |
+| `review` | `inherit` | no | Review-focused agent for diffs, diagnostics, and regression analysis |
 
 Custom project or user specs with the same name override these built-ins using the normal discovery precedence. Use `mode: primary` for main-session agents, `mode: subagent` for delegated-only definitions, and `mode: all` for definitions that should support both.
 
-Primary agents are the direction for build, plan, auto, review, and duck style behaviours: those behaviours can be represented as primary agents over time. Existing modes are not removed by this work.
+Primary agents replace old behaviour labels: choose `duck` for discussion, `plan` for planning workflow, `build` for implementation, `auto` for classifier-reviewed build work, and `review` for read-oriented review.
 
 ## Built-in subagents
 
@@ -79,6 +81,10 @@ description: Read-only reviewer for correctness, regressions, and test gaps. Use
 tools: [read_file, list_files, unified_search]
 permissions:
   default: deny
+  allow: [read_file, list_files, unified_search]
+  ask: []
+  auto: []
+  deny: [unified_exec, edit_file, write_file, apply_patch]
 model: inherit
 color: blue
 reasoning_effort: medium
@@ -157,7 +163,7 @@ Return findings in priority order with file references.
 model = "gpt-5.4-mini"
 model_reasoning_effort = "low"
 maxTurns = 6
-permissions = { default = "deny" }
+permissions = { default = "deny", allow = ["read_file", "list_files", "unified_search"], ask = [], auto = [], deny = ["unified_exec", "edit_file", "write_file", "apply_patch"] }
 ```
 
 VT Code reads `developer_instructions` and also accepts `instructions` for compatibility.
@@ -425,7 +431,7 @@ VT Code treats a single explicit mention as the selected agent for the turn. If 
 
 Press `Tab` on an empty idle composer to cycle the active primary agent. The cycle includes discovered agent specs marked with `mode: primary` or `mode: all`. Project definitions still take precedence over user definitions, imported definitions, plugin definitions, and built-ins according to the discovery order above.
 
-When you select a primary agent, VT Code keeps you in the main session rather than spawning a child thread. The active primary agent is shown in the header next to the current mode.
+When you select a primary agent, VT Code keeps you in the main session rather than spawning a child thread. The active primary agent is shown in the header.
 
 Primary agents use the same agent definition format:
 
@@ -440,6 +446,10 @@ tools: [read_file, list_files, unified_search]
 disallowedTools: [unified_exec, unified_file]
 permissions:
   default: deny
+  allow: [read_file, list_files, unified_search]
+  ask: []
+  auto: []
+  deny: [unified_exec, edit_file, write_file, apply_patch]
 model: inherit
 reasoning_effort: medium
 skills: [code-review]
@@ -481,6 +491,10 @@ color: cyan
 tools: [read_file, list_files, unified_search]
 permissions:
   default: deny
+  allow: [read_file, list_files, unified_search]
+  ask: []
+  auto: []
+  deny: [unified_exec, edit_file, write_file, apply_patch]
 model: inherit
 reasoning_effort: medium
 skills: [code-review]

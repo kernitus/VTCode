@@ -253,10 +253,15 @@ This document serves as an index of all VT Code documentation. When users ask qu
   - **Topics**: Available modes, Command payload structure, Example script
   - **User Questions**: "What can you tell me about Configuring the inline status line?", "How does Available modes work?", "How does Command payload structure work?"
 
-- **File**: `docs/guides/full_auto_mode.md`
-  - **Content**: Full-Auto Automation
-  - **Topics**: Activation Checklist, Runtime Behaviour, Customising the Allow-List, Orchestrated Harness Mode, Profile File Recommendations
-  - **User Questions**: "What can you tell me about Full-Auto Automation?", "How does Activation Checklist work?", "How does Runtime Behaviour work?"
+- **File**: `docs/guides/full-automation.md`
+  - **Content**: Full Automation
+  - **Topics**: Activation Checklist, Runtime Behaviour, Customising The Allow-List, Orchestrated Harness, Profile File Recommendations
+  - **User Questions**: "What can you tell me about Full Automation?", "How does Activation Checklist work?", "How does Runtime Behaviour work?"
+
+- **File**: `docs/guides/permissions.md`
+  - **Content**: Granular Permissions
+  - **Topics**: Agent Permission Schema, Global Rules, Classifier Review Settings, Rule Grammar, Path Matching
+  - **User Questions**: "What can you tell me about Granular Permissions?", "How does Agent Permission Schema work?", "How does Global Rules work?"
 
 - **File**: `docs/guides/memory-management.md`
   - **Content**: Guidance and Persistent Memory for VT Code
@@ -298,10 +303,10 @@ This document serves as an index of all VT Code documentation. When users ask qu
   - **Topics**: Automated Verification, Manual TUI Walkthrough, Troubleshooting
   - **User Questions**: "What can you tell me about PTY Integration Testing Guide?", "How does Automated Verification work?", "How does Manual TUI Walkthrough work?"
 
-- **File**: `docs/guides/PLAN_MODE.md`
+- **File**: `docs/guides/planning-workflow.md`
   - **Content**: Planning Workflow
-  - **Topics**: Overview, Benefits, Usage, Plan Output Format, Summary
-  - **User Questions**: "What can you tell me about Planning Workflow?", "How does Overview work?", "How does Benefits work?"
+  - **Topics**: Overview, Usage, Plan Output Format, Summary, Implementation Steps
+  - **User Questions**: "What can you tell me about Planning Workflow?", "How does Overview work?", "How does Usage work?"
 
 - **File**: `docs/guides/responses-api-reasoning.md`
   - **Content**: Responses API & Reasoning Models
@@ -332,11 +337,6 @@ This document serves as an index of all VT Code documentation. When users ask qu
   - **Content**: Tool Registry Guide
   - **Topics**: Registry architecture, Adding a new tool, Safety guidelines, Testing checklist
   - **User Questions**: "What can you tell me about Tool Registry Guide?", "How does Registry architecture work?", "How does Adding a new tool work?"
-
-- **File**: `docs/guides/permissions.md`
-  - **Content**: Unified Permissions
-  - **Topics**: Modes, Rule grammar, Path matching, Notes
-  - **User Questions**: "What can you tell me about Unified Permissions?", "How does Modes work?", "How does Rule grammar work?"
 
 - **File**: `docs/guides/async-architecture.md`
   - **Content**: VT Code Async Architecture Guide
