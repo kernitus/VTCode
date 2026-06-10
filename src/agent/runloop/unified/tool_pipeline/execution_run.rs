@@ -203,21 +203,6 @@ pub(crate) async fn run_tool_call_with_args(
             outcome
         };
 
-    if !ctx.session_stats.is_plan_mode() && name == tools::PLAN_TASK_TRACKER {
-        return Ok(finish_with_status(
-            ToolExecutionStatus::Failure {
-                error: structured_failure(
-                    name,
-                    &anyhow!(
-                        "plan_task_tracker is a Plan Mode compatibility alias. Use task_tracker in Edit mode, or switch to Plan Mode."
-                    ),
-                ),
-            },
-            false,
-            &effective_args,
-        ));
-    }
-
     if !prevalidated {
         if let Err(safety_failure) = check_tool_safety(
             ctx,

@@ -85,7 +85,7 @@ const PLAN_MODE_MAX_TOOL_LOOP_LIMIT_ABSOLUTE_CAP: usize = 240;
 const PLAN_MODE_TOOL_LOOP_CAP_MULTIPLIER: usize = 6;
 const PLAN_MODE_MAX_TOOL_LOOP_INCREMENT_PER_PROMPT: usize = 80;
 const PLAN_MODE_ENTER_TRIGGER_STATUS: &str = "Plan Mode: explicit planning request detected. Entering read-only planning before continuing this turn.";
-const PLAN_MODE_EXIT_TRIGGER_STATUS: &str = "Plan Mode: implementation intent detected from your message. Running `exit_plan_mode` for plan confirmation; once approved, VT Code will switch to Edit Mode and execute.";
+const PLAN_MODE_EXIT_TRIGGER_STATUS: &str = "Planning workflow: implementation intent detected from your message. Running `finish_planning` for plan confirmation; once approved, VT Code will switch to Edit Mode and execute.";
 const PLAN_MODE_EXIT_SWITCHED_CONTINUE_STATUS: &str =
     "Plan Mode disabled. Continuing this turn in Edit Mode to execute your implementation request.";
 
@@ -369,15 +369,15 @@ pub(super) async fn maybe_handle_plan_mode_exit_trigger(
 
     use crate::agent::runloop::unified::tool_pipeline::run_tool_call;
     use crate::agent::runloop::unified::turn::tool_outcomes::helpers::{
-        EXIT_PLAN_MODE_REASON_USER_REQUESTED_IMPLEMENTATION, build_exit_plan_mode_args,
-        build_step_exit_plan_mode_call_id,
+        FINISH_PLANNING_REASON_USER_REQUESTED_IMPLEMENTATION, build_finish_planning_args,
+        build_step_finish_planning_call_id,
     };
     use vtcode_core::llm::provider::ToolCall;
 
-    let args = build_exit_plan_mode_args(EXIT_PLAN_MODE_REASON_USER_REQUESTED_IMPLEMENTATION);
+    let args = build_finish_planning_args(FINISH_PLANNING_REASON_USER_REQUESTED_IMPLEMENTATION);
     let call = ToolCall::function(
-        build_step_exit_plan_mode_call_id(step_count),
-        tool_names::EXIT_PLAN_MODE.to_string(),
+        build_step_finish_planning_call_id(step_count),
+        tool_names::FINISH_PLANNING.to_string(),
         serde_json::to_string(&args).unwrap_or_else(|_| "{}".to_string()),
     );
     let ctrl_c_state = ctx.ctrl_c_state;
@@ -448,8 +448,8 @@ pub(super) async fn maybe_handle_plan_mode_enter_trigger(
     use vtcode_core::llm::provider::ToolCall;
 
     let call = ToolCall::function(
-        format!("call_{step_count}_enter_plan_mode"),
-        tool_names::ENTER_PLAN_MODE.to_string(),
+        format!("call_{step_count}_start_planning"),
+        tool_names::START_PLANNING.to_string(),
         serde_json::to_string(&json!({
             "description": text,
             "approved": true
@@ -909,7 +909,7 @@ mod tests {
 
     #[test]
     fn plan_mode_exit_trigger_status_mentions_exit_tool_and_transition() {
-        assert!(PLAN_MODE_EXIT_TRIGGER_STATUS.contains("exit_plan_mode"));
+        assert!(PLAN_MODE_EXIT_TRIGGER_STATUS.contains("finish_planning"));
         assert!(PLAN_MODE_EXIT_TRIGGER_STATUS.contains("Edit Mode"));
         assert!(PLAN_MODE_EXIT_TRIGGER_STATUS.contains("implementation intent"));
     }

@@ -10,9 +10,7 @@ use linkme::distributed_slice;
 use crate::config::constants::tools;
 use crate::config::types::CapabilityLevel;
 use crate::tool_policy::ToolPolicy;
-use crate::tools::handlers::{
-    EnterPlanModeTool, ExitPlanModeTool, PlanModeState, PlanTaskTrackerTool, TaskTrackerTool,
-};
+use crate::tools::handlers::{EnterPlanModeTool, ExitPlanModeTool, PlanModeState, TaskTrackerTool};
 use crate::tools::native_memory;
 use crate::tools::request_user_input::RequestUserInputTool;
 use crate::tools::tool_intent::builtin_tool_behavior;
@@ -156,65 +154,39 @@ fn register_cron_delete(_plan_state: Option<&PlanModeState>) -> ToolRegistration
 }
 
 // ---------------------------------------------------------------------------
-// PLAN MODE (enter/exit)
+// PLANNING WORKFLOW (start/finish)
 // ---------------------------------------------------------------------------
 
 #[distributed_slice(BUILTIN_TOOLS)]
-fn register_enter_plan_mode(plan_state: Option<&PlanModeState>) -> ToolRegistration {
+fn register_start_planning(plan_state: Option<&PlanModeState>) -> ToolRegistration {
     let plan_state = plan_state
         .cloned()
         .unwrap_or_else(|| PlanModeState::new(PathBuf::new()));
     let factory_state = plan_state.clone();
     ToolRegistration::from_tool_instance(
-        tools::ENTER_PLAN_MODE,
+        tools::START_PLANNING,
         CapabilityLevel::Basic,
         EnterPlanModeTool::new(plan_state),
     )
     .with_native_cgp_factory(native_cgp_tool_factory(move || {
         EnterPlanModeTool::new(factory_state.clone())
     }))
-    .with_aliases([
-        "plan_mode",
-        "enter_plan",
-        "start_planning",
-        "plan_on",
-        "plan_start",
-        "switch_to_plan_mode",
-        "switch_plan_mode",
-        "mode_plan",
-        "planner_mode",
-        "/plan",
-    ])
 }
 
 #[distributed_slice(BUILTIN_TOOLS)]
-fn register_exit_plan_mode(plan_state: Option<&PlanModeState>) -> ToolRegistration {
+fn register_finish_planning(plan_state: Option<&PlanModeState>) -> ToolRegistration {
     let plan_state = plan_state
         .cloned()
         .unwrap_or_else(|| PlanModeState::new(PathBuf::new()));
     let factory_state = plan_state.clone();
     ToolRegistration::from_tool_instance(
-        tools::EXIT_PLAN_MODE,
+        tools::FINISH_PLANNING,
         CapabilityLevel::Basic,
         ExitPlanModeTool::new(plan_state),
     )
     .with_native_cgp_factory(native_cgp_tool_factory(move || {
         ExitPlanModeTool::new(factory_state.clone())
     }))
-    .with_aliases([
-        "exit_plan",
-        "plan_exit",
-        "start_implementation",
-        "implement_plan",
-        "plan_off",
-        "switch_to_edit_mode",
-        "switch_edit_mode",
-        "mode_edit",
-        "resume_edit_mode",
-        "coder_mode",
-        "/plan_off",
-        "/edit",
-    ])
 }
 
 // ---------------------------------------------------------------------------
@@ -242,23 +214,6 @@ fn register_task_tracker(plan_state: Option<&PlanModeState>) -> ToolRegistration
         )
     }))
     .with_aliases(["plan_manager", "track_tasks", "checklist"])
-}
-
-#[distributed_slice(BUILTIN_TOOLS)]
-fn register_plan_task_tracker(plan_state: Option<&PlanModeState>) -> ToolRegistration {
-    let plan_state = plan_state
-        .cloned()
-        .unwrap_or_else(|| PlanModeState::new(PathBuf::new()));
-    let factory_state = plan_state.clone();
-    ToolRegistration::from_tool_instance(
-        tools::PLAN_TASK_TRACKER,
-        CapabilityLevel::Basic,
-        PlanTaskTrackerTool::new(plan_state),
-    )
-    .with_native_cgp_factory(native_cgp_tool_factory(move || {
-        PlanTaskTrackerTool::new(factory_state.clone())
-    }))
-    .with_aliases(["plan_checklist", "plan_tasks"])
 }
 
 // ---------------------------------------------------------------------------
@@ -794,10 +749,9 @@ mod tests {
 
         for tool_name in [
             tools::REQUEST_USER_INPUT,
-            tools::ENTER_PLAN_MODE,
-            tools::EXIT_PLAN_MODE,
+            tools::START_PLANNING,
+            tools::FINISH_PLANNING,
             tools::TASK_TRACKER,
-            tools::PLAN_TASK_TRACKER,
         ] {
             let registration = registrations
                 .iter()

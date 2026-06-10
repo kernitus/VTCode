@@ -231,7 +231,7 @@ async fn enter_plan_mode_clears_task_tracker_create_signatures() {
     let enter_args = json!({});
     cache_tool_permission(
         &mut backing,
-        tool_names::ENTER_PLAN_MODE,
+        tool_names::START_PLANNING,
         &enter_args,
         PermissionGrant::Permanent,
     )
@@ -253,8 +253,8 @@ async fn enter_plan_mode_clears_task_tracker_create_signatures() {
 
     let result = validate_tool_call(
         &mut ctx,
-        "enter_plan_mode_call",
-        tool_names::ENTER_PLAN_MODE,
+        "start_planning_call",
+        tool_names::START_PLANNING,
         &enter_args,
     )
     .await

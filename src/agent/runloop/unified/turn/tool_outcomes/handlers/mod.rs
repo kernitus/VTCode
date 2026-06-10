@@ -495,7 +495,7 @@ pub(crate) async fn validate_tool_call<'a>(
             if let Some(updated_args) = updated_args {
                 prepared.effective_args = updated_args;
             }
-            if canonical_tool_name == tool_names::ENTER_PLAN_MODE {
+            if canonical_tool_name == tool_names::START_PLANNING {
                 ctx.harness_state.clear_task_tracker_create_signatures();
             }
             // Count budget only for calls that pass all validation/permission gates.

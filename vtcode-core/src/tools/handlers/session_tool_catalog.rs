@@ -580,9 +580,8 @@ fn is_core_tool_entry(entry: &ToolCatalogEntry, config: &SessionToolsConfig) -> 
         | tools::UNIFIED_FILE
         | tools::UNIFIED_EXEC
         | tools::TASK_TRACKER
-        | tools::PLAN_TASK_TRACKER
-        | tools::ENTER_PLAN_MODE
-        | tools::EXIT_PLAN_MODE
+        | tools::START_PLANNING
+        | tools::FINISH_PLANNING
         | tools::SPAWN_AGENT
         | tools::SPAWN_BACKGROUND_SUBPROCESS
         | tools::SEND_INPUT
@@ -769,8 +768,8 @@ mod tests {
     }
 
     #[test]
-    fn plan_task_tracker_stays_visible_outside_plan_mode() {
-        let registration = registration(tools::PLAN_TASK_TRACKER)
+    fn task_tracker_stays_visible_outside_plan_mode() {
+        let registration = registration(tools::TASK_TRACKER)
             .with_description("Track plan tasks")
             .with_parameter_schema(empty_object_schema());
 
@@ -786,7 +785,7 @@ mod tests {
             anthropic_native_memory_enabled: false,
         });
 
-        assert_eq!(names, vec![tools::PLAN_TASK_TRACKER.to_string()]);
+        assert_eq!(names, vec![tools::TASK_TRACKER.to_string()]);
     }
 
     #[test]

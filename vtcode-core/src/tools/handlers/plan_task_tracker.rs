@@ -578,12 +578,12 @@ impl PlanTaskTrackerTool {
 
     async fn active_plan_file(&self) -> Result<PathBuf> {
         if !self.state.is_active() {
-            bail!("plan_task_tracker is only available in Plan Mode");
+            bail!("task_tracker planning storage is only available while planning");
         }
         self.state
             .get_plan_file()
             .await
-            .context("No active plan file. Call enter_plan_mode first.")
+            .context("No active plan file. Call start_planning first.")
     }
 
     async fn tracker_file(&self) -> Result<PathBuf> {
@@ -873,7 +873,7 @@ impl PlanTaskTrackerTool {
 #[async_trait]
 impl Tool for PlanTaskTrackerTool {
     async fn execute(&self, args: Value) -> Result<Value> {
-        let args: PlanTaskTrackerArgs = deserialize_tool_args(&args, "plan_task_tracker")?;
+        let args: PlanTaskTrackerArgs = deserialize_tool_args(&args, "task_tracker")?;
 
         match args.action.as_str() {
             "create" => self.handle_create(&args).await,
@@ -888,11 +888,11 @@ impl Tool for PlanTaskTrackerTool {
     }
 
     fn name(&self) -> &str {
-        tools::PLAN_TASK_TRACKER
+        tools::TASK_TRACKER
     }
 
     fn description(&self) -> &str {
-        "Plan-mode compatibility alias for adaptive task tracking. Persists hierarchical plan progress under .vtcode/plans/<plan>.tasks.md and mirrors updates to .vtcode/tasks/current_task.md. Actions: create, update, list, add."
+        "Adaptive task tracking for planning. Persists hierarchical plan progress under .vtcode/plans/<plan>.tasks.md and mirrors updates to .vtcode/tasks/current_task.md. Actions: create, update, list, add."
     }
 
     fn parameter_schema(&self) -> Option<Value> {

@@ -1059,29 +1059,43 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn preflight_normalizes_plan_mode_force_on_aliases() -> Result<()> {
+    async fn preflight_rejects_removed_planning_start_aliases() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let registry = ToolRegistry::new(temp_dir.path().to_path_buf()).await;
 
-        let on_outcome = registry.preflight_validate_call("plan_on", &json!({}))?;
-        assert_eq!(on_outcome.normalized_tool_name, tools::ENTER_PLAN_MODE);
+        let outcome = registry.preflight_validate_call(tools::START_PLANNING, &json!({}))?;
+        assert_eq!(outcome.normalized_tool_name, tools::START_PLANNING);
 
-        let slash_outcome = registry.preflight_validate_call("/plan", &json!({}))?;
-        assert_eq!(slash_outcome.normalized_tool_name, tools::ENTER_PLAN_MODE);
+        let old_name = registry
+            .preflight_validate_call("enter_plan_mode", &json!({}))
+            .expect_err("old planning tool name should be rejected");
+        assert!(old_name.to_string().contains("Unknown tool"));
+
+        let old_alias = registry
+            .preflight_validate_call("plan_on", &json!({}))
+            .expect_err("removed planning alias should be rejected");
+        assert!(old_alias.to_string().contains("Unknown tool"));
 
         Ok(())
     }
 
     #[tokio::test]
-    async fn preflight_normalizes_plan_mode_force_off_aliases() -> Result<()> {
+    async fn preflight_rejects_removed_planning_finish_aliases() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let registry = ToolRegistry::new(temp_dir.path().to_path_buf()).await;
 
-        let off_outcome = registry.preflight_validate_call("mode_edit", &json!({}))?;
-        assert_eq!(off_outcome.normalized_tool_name, tools::EXIT_PLAN_MODE);
+        let outcome = registry.preflight_validate_call(tools::FINISH_PLANNING, &json!({}))?;
+        assert_eq!(outcome.normalized_tool_name, tools::FINISH_PLANNING);
 
-        let slash_outcome = registry.preflight_validate_call("/edit", &json!({}))?;
-        assert_eq!(slash_outcome.normalized_tool_name, tools::EXIT_PLAN_MODE);
+        let old_name = registry
+            .preflight_validate_call("exit_plan_mode", &json!({}))
+            .expect_err("old planning tool name should be rejected");
+        assert!(old_name.to_string().contains("Unknown tool"));
+
+        let old_alias = registry
+            .preflight_validate_call("mode_edit", &json!({}))
+            .expect_err("removed planning alias should be rejected");
+        assert!(old_alias.to_string().contains("Unknown tool"));
 
         Ok(())
     }

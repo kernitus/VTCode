@@ -26,8 +26,8 @@ use crate::agent::runloop::unified::turn::plan_content::parse_plan_content_from_
 use super::execution_attempts::execute_tool_with_timeout_ref_prevalidated;
 use super::status::{ToolExecutionStatus, ToolPipelineOutcome};
 
-const ENTER_PLAN_MODE_APPROVE_ACTION: &str = "plan_mode:enter";
-const ENTER_PLAN_MODE_STAY_ACTION: &str = "plan_mode:stay";
+const START_PLANNING_APPROVE_ACTION: &str = "planning:start";
+const START_PLANNING_STAY_ACTION: &str = "planning:stay";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EnterPlanModeConfirmation {
@@ -67,7 +67,7 @@ pub(super) async fn handle_enter_plan_mode(
     max_tool_retries: usize,
     allow_preapproved: bool,
 ) -> Option<ToolPipelineOutcome> {
-    if name != tools::ENTER_PLAN_MODE {
+    if name != tools::START_PLANNING {
         return None;
     }
 
@@ -152,7 +152,7 @@ pub(super) async fn handle_exit_plan_mode(
     max_tool_retries: usize,
     vt_cfg: Option<&VTCodeConfig>,
 ) -> Option<ToolPipelineOutcome> {
-    if name != tools::EXIT_PLAN_MODE {
+    if name != tools::FINISH_PLANNING {
         return None;
     }
 
@@ -338,7 +338,7 @@ async fn handle_enter_pending_confirmation(
                 badge: Some("Recommended".to_string()),
                 indent: 0,
                 selection: Some(InlineListSelection::ConfigAction(
-                    ENTER_PLAN_MODE_APPROVE_ACTION.to_string(),
+                    START_PLANNING_APPROVE_ACTION.to_string(),
                 )),
                 search_value: None,
             },
@@ -348,13 +348,13 @@ async fn handle_enter_pending_confirmation(
                 badge: None,
                 indent: 0,
                 selection: Some(InlineListSelection::ConfigAction(
-                    ENTER_PLAN_MODE_STAY_ACTION.to_string(),
+                    START_PLANNING_STAY_ACTION.to_string(),
                 )),
                 search_value: None,
             },
         ],
         selected: Some(InlineListSelection::ConfigAction(
-            ENTER_PLAN_MODE_APPROVE_ACTION.to_string(),
+            START_PLANNING_APPROVE_ACTION.to_string(),
         )),
         search: None,
         hotkeys: Vec::new(),
@@ -368,12 +368,12 @@ async fn handle_enter_pending_confirmation(
         ctrl_c_notify,
         |submission| match submission {
             TransientSubmission::Selection(InlineListSelection::ConfigAction(action))
-                if action == ENTER_PLAN_MODE_APPROVE_ACTION =>
+                if action == START_PLANNING_APPROVE_ACTION =>
             {
                 Some(EnterPlanModeConfirmation::Enter)
             }
             TransientSubmission::Selection(InlineListSelection::ConfigAction(action))
-                if action == ENTER_PLAN_MODE_STAY_ACTION =>
+                if action == START_PLANNING_STAY_ACTION =>
             {
                 Some(EnterPlanModeConfirmation::Stay)
             }
@@ -414,7 +414,7 @@ async fn handle_enter_pending_confirmation(
 
     let tool_result = execute_tool_with_timeout_ref_prevalidated(
         ctx.tool_registry,
-        tools::ENTER_PLAN_MODE,
+        tools::START_PLANNING,
         &approved_args,
         ctrl_c_state,
         ctrl_c_notify,

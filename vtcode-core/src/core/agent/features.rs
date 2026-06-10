@@ -125,8 +125,8 @@ mod tests {
         assert!(features.allows_tool_name(tools::REQUEST_USER_INPUT, false, true));
         assert!(features.allows_tool_name(tools::REQUEST_USER_INPUT, true, true));
         assert!(!features.allows_tool_name(tools::REQUEST_USER_INPUT, true, false));
-        assert!(features.allows_tool_name(tools::PLAN_TASK_TRACKER, true, false));
-        assert!(features.allows_tool_name(tools::PLAN_TASK_TRACKER, false, true));
+        assert!(features.allows_tool_name(tools::TASK_TRACKER, true, false));
+        assert!(features.allows_tool_name(tools::TASK_TRACKER, false, true));
     }
 
     #[test]

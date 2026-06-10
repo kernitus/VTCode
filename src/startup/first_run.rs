@@ -370,7 +370,7 @@ fn setup_summary_lines(
 
 fn capability_highlight_lines(persistent_memory_enabled: bool) -> Vec<String> {
     vec![
-        "- Switch modes anytime with `/mode` or `Shift+Tab` to move between Edit, Auto, and Plan.".to_string(),
+        "- Use `/plan` for read-only planning, then finish planning before implementation.".to_string(),
         "- Auto mode uses classifier-backed permission checks inside the normal session. `--full-auto` is separate and uses the explicit `[automation.full_auto]` allow-list.".to_string(),
         format!(
             "- Persistent repository memory is {} for this workspace. Change `[features].memories` or `agent.persistent_memory.enabled` later in `vtcode.toml` if you want a different default.",

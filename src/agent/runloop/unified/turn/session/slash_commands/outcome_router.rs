@@ -67,9 +67,6 @@ pub(super) async fn route_outcome(
         | SlashCommandOutcome::ShareLog { .. }
         | SlashCommandOutcome::Exit) => route_navigation_outcome(outcome, ctx).await,
         outcome @ (SlashCommandOutcome::TogglePlanMode { .. }
-        | SlashCommandOutcome::StartModeSelection
-        | SlashCommandOutcome::SetMode { .. }
-        | SlashCommandOutcome::CycleMode
         | SlashCommandOutcome::OAuthLogin { .. }
         | SlashCommandOutcome::StartOAuthProviderPicker { .. }
         | SlashCommandOutcome::OAuthLogout { .. }
@@ -221,9 +218,6 @@ async fn route_mode_and_auth_outcome(
             }
             Ok(control)
         }
-        SlashCommandOutcome::StartModeSelection => handlers::handle_start_mode_selection(ctx).await,
-        SlashCommandOutcome::SetMode { mode } => handlers::handle_set_mode(ctx, mode).await,
-        SlashCommandOutcome::CycleMode => handlers::handle_cycle_mode(ctx).await,
         SlashCommandOutcome::OAuthLogin { provider } => {
             handlers::handle_oauth_login(ctx, provider).await
         }

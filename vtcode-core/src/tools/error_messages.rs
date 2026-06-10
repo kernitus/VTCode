@@ -24,11 +24,11 @@ pub mod agent_execution {
     pub fn plan_mode_denial_message(tool_name: &str) -> String {
         format!(
             "Tool '{}' execution failed: tool denied by plan mode\n\n\
-             ACTION REQUIRED: You are in Plan Mode (read-only). To start implementation:\n\
-             1. Call `exit_plan_mode` tool to show the user your plan for approval\n\
+             ACTION REQUIRED: You are planning in read-only mode. To start implementation:\n\
+             1. Call `finish_planning` tool to show the user your plan for approval\n\
              2. Wait for user to confirm (they will see the Implementation Blueprint)\n\
              3. After approval, mutating tools will be enabled\n\n\
-             Fallback if automatic Plan->Edit switching keeps failing: manually switch using `/plan off` or `/mode` (or `Shift+Tab`/`Alt+M` in interactive mode).",
+             Fallback if automatic planning->editing switching keeps failing: manually finish planning using `/plan off`.",
             tool_name
         )
     }
@@ -100,10 +100,9 @@ mod tests {
     fn test_agent_execution_message_helpers() {
         let plan_mode_msg = agent_execution::plan_mode_denial_message("write_file");
         assert!(agent_execution::is_plan_mode_denial(&plan_mode_msg));
-        assert!(plan_mode_msg.contains("exit_plan_mode"));
+        assert!(plan_mode_msg.contains("finish_planning"));
         assert!(plan_mode_msg.contains("/plan off"));
-        assert!(plan_mode_msg.contains("/mode"));
-        assert!(plan_mode_msg.contains("Shift+Tab"));
+        assert!(!plan_mode_msg.contains("/mode"));
         assert!(!plan_mode_msg.contains("DO NOT retry this tool or use /plan off"));
 
         let loop_msg =

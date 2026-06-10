@@ -708,7 +708,7 @@ pub async fn persist_plan_draft(
     let plan_file = state
         .get_plan_file()
         .await
-        .context("No active plan file. Call enter_plan_mode first.")?;
+        .context("No active plan file. Call start_planning first.")?;
     let existing_plan = read_file_with_context(&plan_file, "plan file").await.ok();
     let tracker_file = tracker_file_for_plan_file(&plan_file);
     let (existing_tracker, tracker_from_sidecar) = if let Some(path) = tracker_file.as_ref() {
@@ -1117,7 +1117,7 @@ impl Tool for EnterPlanModeTool {
                 "1. Explore files and capture repository facts before drafting the plan",
                 "2. Ask or close only material blocking decisions",
                 "3. Emit one concrete <proposed_plan> draft and persist it to the plan file",
-                "4. Use exit_plan_mode when ready for the user to review and approve"
+                "4. Use finish_planning when ready for the user to review and approve"
             ],
             "workflow_phases": [
                 "Phase A: Explore facts",
@@ -1128,7 +1128,7 @@ impl Tool for EnterPlanModeTool {
     }
 
     fn name(&self) -> &str {
-        tools::ENTER_PLAN_MODE
+        tools::START_PLANNING
     }
 
     fn description(&self) -> &str {
@@ -1389,7 +1389,7 @@ impl Tool for ExitPlanModeTool {
     }
 
     fn name(&self) -> &str {
-        tools::EXIT_PLAN_MODE
+        tools::FINISH_PLANNING
     }
 
     fn description(&self) -> &str {

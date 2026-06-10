@@ -285,30 +285,23 @@ mod tests {
     use vtcode_core::config::loader::VTCodeConfig;
 
     #[test]
-    fn persist_mode_settings_ignores_legacy_permission_mode() {
+    fn persist_mode_settings_leaves_config_unchanged() {
         let temp = TempDir::new().expect("temp dir");
         let workspace = temp.path();
         let initial = VTCodeConfig::default();
-        std::fs::write(
-            workspace.join("vtcode.toml"),
-            toml::to_string(&initial).expect("serialize config"),
-        )
-        .expect("write config");
+        let initial_text = toml::to_string(&initial).expect("serialize initial config");
+        std::fs::write(workspace.join("vtcode.toml"), &initial_text).expect("write config");
 
         let mut vt_cfg = Some(initial.clone());
         persist_mode_settings(workspace, &mut vt_cfg, Some(PermissionMode::Auto))
             .expect("persist mode settings");
 
         let persisted = std::fs::read_to_string(workspace.join("vtcode.toml")).expect("config");
-        assert!(
-            !persisted.contains("default_model ="),
-            "mode persistence should not expand agent defaults. Got:\n{}",
-            persisted
-        );
+        assert_eq!(persisted, initial_text);
         assert_eq!(
-            persisted,
-            toml::to_string(&initial).expect("serialize initial config")
+            toml::to_string(vt_cfg.as_ref().expect("config in memory"))
+                .expect("serialize in-memory config"),
+            initial_text
         );
-        assert!(vt_cfg.is_some());
     }
 }

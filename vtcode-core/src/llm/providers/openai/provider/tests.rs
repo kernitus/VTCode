@@ -9,7 +9,6 @@ use crate::config::core::{
 };
 use crate::llm::provider::{LLMProvider, NormalizedStreamEvent, ParallelToolConfig};
 use crate::tools::handlers::plan_mode::PlanModeState;
-use crate::tools::handlers::plan_task_tracker::PlanTaskTrackerTool;
 use crate::tools::handlers::task_tracker::TaskTrackerTool;
 use crate::tools::traits::Tool;
 use futures::StreamExt;
@@ -1679,9 +1678,6 @@ fn responses_function_tools_strip_openai_schema_combinators_from_builtin_tools()
     let task_tracker_parameters = TaskTrackerTool::new(PathBuf::new(), plan_mode_state.clone())
         .parameter_schema()
         .expect("task tracker schema should exist");
-    let plan_task_tracker_parameters = PlanTaskTrackerTool::new(plan_mode_state)
-        .parameter_schema()
-        .expect("plan task tracker schema should exist");
 
     let provider = native_openai_provider(models::openai::GPT_5_2_CODEX);
     let request = provider::LLMRequest {
@@ -1696,11 +1692,6 @@ fn responses_function_tools_strip_openai_schema_combinators_from_builtin_tools()
                 "task_tracker".to_owned(),
                 "Track tasks".to_owned(),
                 task_tracker_parameters,
-            ),
-            provider::ToolDefinition::function(
-                "plan_task_tracker".to_owned(),
-                "Track plan tasks".to_owned(),
-                plan_task_tracker_parameters,
             ),
         ])),
         model: models::openai::GPT_5_2_CODEX.to_string(),

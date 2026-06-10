@@ -10,9 +10,10 @@ pub(crate) const PLAN_MODE_REVIEW_AND_EXECUTE_HINT: &str = "Plan Mode: review th
 pub(crate) const PLAN_MODE_SHORT_CONFIRMATION_HINT: &str = "Plan Mode: type `implement` (or `yes`/`continue`/`go`/`start`) to execute, or say `stay in plan mode` to revise.";
 pub(crate) const PLAN_MODE_KEEP_PLANNING_HINT: &str =
     "To keep planning, say `stay in plan mode` and describe what to revise.";
-pub(crate) const PLAN_MODE_MANUAL_SWITCH_FALLBACK_HINT: &str = "If automatic Plan->Edit switching fails, manually switch with `/plan off` or `/mode` (or `Shift+Tab`/`Alt+M`).";
+pub(crate) const PLAN_MODE_MANUAL_SWITCH_FALLBACK_HINT: &str =
+    "If automatic planning->editing switching fails, manually finish planning with `/plan off`.";
 pub(crate) const PLAN_MODE_STILL_ACTIVE_PREFIX: &str =
-    "Plan Mode still active. Call `exit_plan_mode` to review/refine the plan before retrying.";
+    "Planning is still active. Call `finish_planning` to review/refine the plan before retrying.";
 
 pub(crate) fn short_confirmation_hint_with_fallback() -> String {
     format!(

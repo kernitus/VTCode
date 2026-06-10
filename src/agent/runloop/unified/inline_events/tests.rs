@@ -473,7 +473,7 @@ async fn cancelling_url_guard_restores_previous_palette() {
 }
 
 #[tokio::test]
-async fn toggle_mode_event_submits_mode_command() {
+async fn toggle_mode_event_cycles_primary_agent() {
     let (handle, mut renderer) = renderer_with_handle();
     let (ctrl_c_state, ctrl_c_notify) = ctrl_c_handles();
     let interrupts = InlineInterruptCoordinator::new(ctrl_c_state.as_ref());
@@ -510,10 +510,7 @@ async fn toggle_mode_event_submits_mode_command() {
         .process_event(InlineEvent::ToggleMode, &mut queue)
         .await
         .expect("process toggle mode");
-    assert!(matches!(
-        action,
-        InlineLoopAction::Submit(ref command) if command == "/mode"
-    ));
+    assert!(matches!(action, InlineLoopAction::CyclePrimaryAgent));
 }
 
 #[tokio::test]

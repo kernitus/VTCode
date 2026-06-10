@@ -461,9 +461,8 @@ impl AgentRunner {
                     canonical,
                     tools::REQUEST_USER_INPUT
                         | tools::TASK_TRACKER
-                        | tools::PLAN_TASK_TRACKER
-                        | tools::ENTER_PLAN_MODE
-                        | tools::EXIT_PLAN_MODE
+                        | tools::START_PLANNING
+                        | tools::FINISH_PLANNING
                 ) && (canonical == tools::UNIFIED_FILE
                     || !self.tool_registry.is_mutating_tool(tool_name))
             })

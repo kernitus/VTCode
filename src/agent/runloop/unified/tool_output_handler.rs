@@ -154,7 +154,7 @@ fn has_renderable_stream_content(output: &serde_json::Value) -> bool {
 }
 
 fn is_task_tracker_tool(name: &str) -> bool {
-    matches!(name, tools::TASK_TRACKER | tools::PLAN_TASK_TRACKER)
+    matches!(name, tools::TASK_TRACKER)
 }
 
 fn task_tracker_item_preview(item: &serde_json::Value) -> Option<String> {

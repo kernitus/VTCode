@@ -26,7 +26,7 @@ pub const PLAN_MODE_READ_ONLY_HEADER: &str = "# PLAN MODE (READ-ONLY)";
 pub const PLAN_MODE_READ_ONLY_NOTICE_LINE: &str = "Plan Mode is active. Mutating tools are blocked except for optional plan artifact writes under `.vtcode/plans/` (or an explicit custom plan path).";
 /// Shared Plan Mode instruction line for transitioning to implementation.
 pub const PLAN_MODE_EXIT_INSTRUCTION_LINE: &str =
-    "Call `exit_plan_mode` when ready to transition to implementation.";
+    "Call `finish_planning` when ready to transition to implementation.";
 /// Shared Plan Mode instruction line for decision-complete planning output.
 pub const PLAN_MODE_PLAN_QUALITY_LINE: &str = "Explore repository facts first, ask only material blocking questions, keep planning read-only, and emit exactly one decision-complete `<proposed_plan>` block with a summary, implementation steps, test cases, and assumptions/defaults. If something is still unresolved, end with `Next open decision: ...`.";
 /// Shared Plan Mode policy line requiring context-aware interview closure before final plans.
@@ -36,10 +36,9 @@ pub const PLAN_MODE_NO_REQUEST_USER_INPUT_POLICY_LINE: &str = "In this runtime, 
 /// Shared Plan Mode guard line requiring explicit transition from planning to execution.
 pub const PLAN_MODE_NO_AUTO_EXIT_LINE: &str = "Do not auto-exit Plan Mode just because a plan exists; wait for explicit implementation intent.";
 /// Shared Plan Mode task-tracking line clarifying availability and aliasing.
-pub const PLAN_MODE_TASK_TRACKER_LINE: &str =
-    "`task_tracker` remains available in Plan Mode (`plan_task_tracker` is a compatibility alias).";
+pub const PLAN_MODE_TASK_TRACKER_LINE: &str = "`task_tracker` remains available while planning.";
 /// Shared reminder appended when presenting plans while still in Plan Mode.
-pub const PLAN_MODE_IMPLEMENT_REMINDER: &str = "• Still in Plan Mode (read-only). Say “implement” to execute, or “stay in plan mode” to revise. If automatic Plan->Edit switching fails, manually switch with `/plan off` or `/mode` (or press `Shift+Tab`/`Alt+M` in interactive mode).";
+pub const PLAN_MODE_IMPLEMENT_REMINDER: &str = "• Still planning in read-only mode. Say “implement” to execute, or “stay in plan mode” to revise. If automatic planning->editing switching fails, manually finish planning with `/plan off`.";
 
 const PROMPT_TITLE: &str = "# VT Code";
 const PROMPT_INTRO: &str = "VT Code. Be concise and safe.";

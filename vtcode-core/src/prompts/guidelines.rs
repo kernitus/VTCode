@@ -14,7 +14,6 @@ const TOOL_LIST_FILES: &str = tools::LIST_FILES;
 const TOOL_APPLY_PATCH: &str = tools::APPLY_PATCH;
 const TOOL_REQUEST_USER_INPUT: &str = tools::REQUEST_USER_INPUT;
 const TOOL_TASK_TRACKER: &str = tools::TASK_TRACKER;
-const TOOL_PLAN_TASK_TRACKER: &str = tools::PLAN_TASK_TRACKER;
 
 /// Generate compact cross-tool guidance based on the tools available in the session.
 pub fn generate_tool_guidelines(
@@ -151,7 +150,7 @@ fn generate_runtime_tool_guidelines(available_tools: &[String], plan_mode: bool)
         .any(|tool| tool == TOOL_REQUEST_USER_INPUT);
     let has_task_tracker = available_tools
         .iter()
-        .any(|tool| matches!(tool.as_str(), TOOL_TASK_TRACKER | TOOL_PLAN_TASK_TRACKER));
+        .any(|tool| matches!(tool.as_str(), TOOL_TASK_TRACKER));
 
     let mut lines = vec![
         "- Mode: read-only. Stay within the plan-mode tool list and use only read-safe actions."

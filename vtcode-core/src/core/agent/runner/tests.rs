@@ -447,8 +447,7 @@ async fn review_tool_allowlist_excludes_mutating_and_plan_only_tools() {
             tools::UNIFIED_FILE.to_string(),
             tools::UNIFIED_EXEC.to_string(),
             "task_tracker".to_string(),
-            "plan_task_tracker".to_string(),
-            "enter_plan_mode".to_string(),
+            "start_planning".to_string(),
         ])
         .await;
 

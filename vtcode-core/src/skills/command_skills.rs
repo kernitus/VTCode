@@ -385,14 +385,8 @@ pub const COMMAND_SKILL_SPECS: &[CommandSkillSpec] = &[
     ),
     built_in_command_spec!(
         "plan",
-        "Plan Mode: read-only planning with optional prompt (usage: /plan [on|off] [task])",
+        "Planning workflow with optional prompt (usage: /plan [on|off] [task])",
         "/plan [on|off] [task]",
-        "session"
-    ),
-    built_in_command_spec!(
-        "mode",
-        "Open the session mode picker or switch directly (usage: /mode [edit|auto|plan|cycle])",
-        "/mode [edit|auto|plan|cycle]",
         "session"
     ),
     built_in_command_spec!(

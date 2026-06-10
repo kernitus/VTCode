@@ -276,11 +276,7 @@ impl NativeAgentDraft {
             insert_yaml_string(&mut frontmatter, "reasoning_effort", reasoning_effort);
         }
         if let Some(permission_mode) = self.permission_mode {
-            insert_yaml_string(
-                &mut frontmatter,
-                "permissionMode",
-                permission_mode_label(permission_mode),
-            );
+            insert_yaml_permissions_default(&mut frontmatter, permission_mode);
         }
         insert_yaml_bool(&mut frontmatter, "background", self.background);
         if let Some(max_turns) = self.max_turns {
@@ -1409,10 +1405,25 @@ fn insert_yaml_string_list(mapping: &mut YamlMapping, key: &str, values: &[Strin
     );
 }
 
+fn insert_yaml_permissions_default(mapping: &mut YamlMapping, mode: PermissionMode) {
+    let mut permissions = YamlMapping::new();
+    insert_yaml_string(&mut permissions, "default", permission_default_label(mode));
+    mapping.insert("permissions".to_string(), YamlValue::Object(permissions));
+}
+
 fn scope_label(scope: AgentDefinitionScope) -> &'static str {
     match scope {
         AgentDefinitionScope::Project => ".vtcode/agents/<name>.md",
         AgentDefinitionScope::User => "~/.vtcode/agents/<name>.md",
+    }
+}
+
+fn permission_default_label(mode: PermissionMode) -> &'static str {
+    match mode {
+        PermissionMode::Default => "ask",
+        PermissionMode::AcceptEdits | PermissionMode::BypassPermissions => "allow",
+        PermissionMode::Auto => "auto",
+        PermissionMode::Plan | PermissionMode::DontAsk => "deny",
     }
 }
 
@@ -1588,7 +1599,8 @@ tools:
 model: inherit
 color: blue
 reasoning_effort: medium
-permissionMode: plan
+permissions:
+  default: deny
 background: true
 maxTurns: 7
 memory: project
@@ -1611,6 +1623,8 @@ Review the target changes."#,
         let rendered = draft.render_markdown().expect("rendered markdown");
 
         assert!(rendered.contains("description: Updated description"));
+        assert!(rendered.contains("permissions:\n  default: deny\n"));
+        assert!(!rendered.contains("permissionMode:"));
         assert!(rendered.contains("skills:"));
         assert!(rendered.contains("nickname_candidates:"));
         assert!(rendered.ends_with("\nReview the target changes."));
@@ -1718,9 +1732,8 @@ Review the target changes."#,
         let reasoning_index = rendered
             .find("reasoning_effort: high")
             .expect("reasoning key");
-        let permission_index = rendered
-            .find("permissionMode: plan")
-            .expect("permission key");
+        let permissions_index = rendered.find("permissions:").expect("permission key");
+        let permissions_default_index = rendered.find("default: deny").expect("permission default");
         let background_index = rendered.find("background: true").expect("background key");
         let max_turns_index = rendered.find("maxTurns: 5").expect("maxTurns key");
         let memory_index = rendered.find("memory: project").expect("memory key");
@@ -1728,11 +1741,13 @@ Review the target changes."#,
 
         assert!(model_index < color_index);
         assert!(color_index < reasoning_index);
-        assert!(reasoning_index < permission_index);
-        assert!(permission_index < background_index);
+        assert!(reasoning_index < permissions_index);
+        assert!(permissions_index < permissions_default_index);
+        assert!(permissions_default_index < background_index);
         assert!(background_index < max_turns_index);
         assert!(max_turns_index < memory_index);
         assert!(memory_index < skills_index);
+        assert!(!rendered.contains("permissionMode:"));
         assert!(rendered.ends_with("\nPrompt body\n  with indentation\n"));
     }
 

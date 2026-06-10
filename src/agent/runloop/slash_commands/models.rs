@@ -20,13 +20,6 @@ pub(crate) enum StatuslineTargetMode {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum SessionModeCommand {
-    Edit,
-    Auto,
-    Plan,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum OAuthProviderAction {
     Login,
     Logout,
@@ -214,11 +207,6 @@ pub(crate) enum SlashCommandOutcome {
         enable: Option<bool>,
         prompt: Option<String>,
     },
-    StartModeSelection,
-    SetMode {
-        mode: SessionModeCommand,
-    },
-    CycleMode,
     OAuthLogin {
         provider: String,
     },
