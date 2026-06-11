@@ -392,7 +392,7 @@ mod tests {
         let agent = build_agent(temp.path()).await;
         let session_id = agent.register_session();
 
-        for primary_agent in ["duck", "plan", "build", "auto", "review"] {
+        for primary_agent in ["duck", "plan", "build", "auto"] {
             let response = agent
                 .set_session_config_option(SetSessionConfigOptionRequest::new(
                     session_id.clone(),
@@ -466,7 +466,7 @@ Research primary prompt."#,
 
         assert_eq!(
             primary_agent_select_values(&config_options),
-            ["duck", "plan", "build", "auto", "review", "research"]
+            ["duck", "plan", "build", "auto", "research"]
                 .map(str::to_string)
                 .to_vec()
         );

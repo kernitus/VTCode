@@ -12,7 +12,7 @@ pub(crate) const SESSION_CONFIG_THOUGHT_LEVEL_ID: &str = "thought_level";
 pub(crate) const SESSION_CONFIG_PROVIDER_ID: &str = "provider";
 pub(crate) const SESSION_CONFIG_MODEL_ID: &str = "model";
 
-const BUILTIN_PRIMARY_AGENT_ORDER: [&str; 5] = ["duck", "plan", "build", "auto", "review"];
+const BUILTIN_PRIMARY_AGENT_ORDER: [&str; 4] = ["duck", "plan", "build", "auto"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PrimaryAgentSessionOption {

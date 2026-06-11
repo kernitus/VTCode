@@ -718,14 +718,14 @@ mod tests {
     fn built_in_primary_agents_resolve_required_permission_policy() {
         let builtins = builtin_subagents();
 
-        for name in ["build", "auto", "plan", "duck", "review"] {
+        for name in ["duck", "plan", "build", "auto"] {
             let active = resolve_primary_agent(&builtins, name)
                 .unwrap_or_else(|_| panic!("missing built-in primary agent {name}"));
             assert_eq!(active.identity.name, name);
             let expected_default = match name {
                 "build" => PermissionDefault::Ask,
                 "auto" => PermissionDefault::Auto,
-                "plan" | "duck" | "review" => PermissionDefault::Deny,
+                "plan" | "duck" => PermissionDefault::Deny,
                 _ => unreachable!("unexpected built-in primary agent"),
             };
             assert_eq!(active.permissions.default, expected_default);

@@ -68,13 +68,6 @@ Be discussion-first. Help the user clarify scope, constraints, contradictions, a
 Do not edit files, you are for rubber-ducking only.
 If the user asks for edits, suggest pressing Tab to switch to the Build agent for implementation."#;
 
-const BUILTIN_REVIEW_PRIMARY_AGENT: &str = r#"You are the review agent.
-
-Review code and plans skeptically. Prioritise correctness bugs, behavioural regressions, missing
-tests, safety risks, and maintainability issues.
-Read the relevant files before making claims. Report findings first with specific file references,
-then note residual risk. Do not modify files."#;
-
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -469,7 +462,6 @@ pub fn builtin_subagents() -> Vec<SubagentSpec> {
         builtin_primary_auto_agent(),
         builtin_primary_duck_agent(),
         builtin_plan_agent(),
-        builtin_primary_review_agent(),
         SubagentSpec {
             name: "default".to_string(),
             description: "Default inheriting subagent for general delegated work.".to_string(),
@@ -654,34 +646,6 @@ pub fn builtin_primary_duck_agent() -> SubagentSpec {
         memory: None,
         isolation: None,
         aliases: Vec::new(),
-        source: SubagentSource::Builtin,
-        file_path: None,
-        warnings: Vec::new(),
-    }
-}
-
-pub fn builtin_primary_review_agent() -> SubagentSpec {
-    SubagentSpec {
-        name: "review".to_string(),
-        description: "Built-in read-only review agent for the main session.".to_string(),
-        prompt: BUILTIN_REVIEW_PRIMARY_AGENT.to_string(),
-        tools: Some(builtin_readonly_tool_ids()),
-        disallowed_tools: builtin_readonly_disallowed_tool_ids(),
-        model: Some("inherit".to_string()),
-        color: Some("red".to_string()),
-        reasoning_effort: Some("medium".to_string()),
-        permissions: readonly_agent_permissions(),
-        skills: Vec::new(),
-        mcp_servers: Vec::new(),
-        hooks: None,
-        background: false,
-        mode: AgentMode::Primary,
-        max_turns: None,
-        nickname_candidates: vec!["review".to_string(), "reviewer".to_string()],
-        initial_prompt: None,
-        memory: None,
-        isolation: None,
-        aliases: vec!["reviewer".to_string(), "critic".to_string()],
         source: SubagentSource::Builtin,
         file_path: None,
         warnings: Vec::new(),
@@ -2180,16 +2144,16 @@ Hook prompt"#,
                 .contains(&tools::READ_FILE.to_string())
         );
 
-        for name in ["build", "auto", "duck", "review"] {
+        for name in ["build", "auto", "duck", "plan"] {
             let spec = builtins
                 .iter()
-                .find(|spec| spec.name == name && spec.mode == AgentMode::Primary)
+                .find(|spec| spec.name == name && spec.is_primary())
                 .unwrap_or_else(|| panic!("missing built-in primary agent {name}"));
             assert_eq!(spec.source, SubagentSource::Builtin);
             let expected_default = match name {
                 "build" => PermissionDefault::Ask,
                 "auto" => PermissionDefault::Auto,
-                "duck" | "review" => PermissionDefault::Deny,
+                "duck" | "plan" => PermissionDefault::Deny,
                 _ => unreachable!("unexpected built-in primary agent"),
             };
             assert_eq!(spec.permissions.default, expected_default);
@@ -2206,6 +2170,10 @@ Hook prompt"#,
             .find(|spec| spec.name == "auto" && spec.mode == AgentMode::Primary)
             .expect("missing built-in auto primary agent");
         assert_eq!(auto.permissions.default, PermissionDefault::Auto);
+        assert!(
+            builtins.iter().all(|spec| spec.name != "review"),
+            "review must not be a built-in primary or subagent"
+        );
     }
 
     #[test]
@@ -2228,7 +2196,7 @@ Hook prompt"#,
         assert_eq!(auto.permissions.default, PermissionDefault::Auto);
         assert!(!auto.is_read_only());
 
-        for name in ["duck", "explorer", "plan", "review"] {
+        for name in ["duck", "explorer", "plan"] {
             let spec = builtins
                 .iter()
                 .find(|spec| spec.name == name)

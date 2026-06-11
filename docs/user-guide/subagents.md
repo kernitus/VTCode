@@ -25,11 +25,10 @@ For new `.vtcode/agents/*.md` files, use VT Code tool ids in frontmatter. Claude
 | `auto` | `inherit` | yes, classifier-reviewed | Build-oriented agent that routes configured tools through `permissions.auto` |
 | `plan` | `inherit` | no | Planning workflow agent for repository exploration and proposal drafting |
 | `duck` | `inherit` | no | Discussion-first agent for scope, constraints, and trade-offs |
-| `review` | `inherit` | no | Review-focused agent for diffs, diagnostics, and regression analysis |
 
 Custom project or user specs with the same name override these built-ins using the normal discovery precedence. Use `mode: primary` for main-session agents, `mode: subagent` for delegated-only definitions, and `mode: all` for definitions that should support both.
 
-Primary agents replace old behaviour labels: choose `duck` for discussion, `plan` for planning workflow, `build` for implementation, `auto` for classifier-reviewed build work, and `review` for read-oriented review.
+Primary agents replace old behaviour labels: choose `duck` for discussion, `plan` for planning workflow, `build` for implementation, and `auto` for classifier-reviewed build work.
 
 ## Built-in subagents
 

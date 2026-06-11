@@ -258,9 +258,9 @@ async fn read_only_primary_agents_hide_local_tools() {
             .tool_definitions(true, &enabled_tools, "duck")
             .unwrap(),
     );
-    let review_names = definition_names(
+    let plan_names = definition_names(
         agent
-            .tool_definitions(true, &enabled_tools, "review")
+            .tool_definitions(true, &enabled_tools, "plan")
             .unwrap(),
     );
     let build_names = definition_names(
@@ -270,7 +270,7 @@ async fn read_only_primary_agents_hide_local_tools() {
     );
 
     assert_eq!(duck_names, vec![tools::LIST_FILES.to_string()]);
-    assert_eq!(review_names, duck_names);
+    assert_eq!(plan_names, duck_names);
     let removed_tool = format!("switch_{}", "mode");
     assert!(!build_names.contains(&removed_tool));
     assert!(build_names.contains(&tools::LIST_FILES.to_string()));

@@ -563,7 +563,7 @@ mod tests {
 
     #[tokio::test]
     async fn register_session_uses_known_default_primary_agent_ids() {
-        for primary_agent in ["duck", "plan", "build", "auto", "review"] {
+        for primary_agent in ["duck", "plan", "build", "auto"] {
             let temp = TempDir::new().unwrap();
             let agent = build_agent_with_default_primary_agent(temp.path(), primary_agent).await;
             let session_id = agent.register_session();
